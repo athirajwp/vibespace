@@ -1,0 +1,9 @@
+node_modules
+.next
+.git
+.gitignore
+AGENTS.md
+CLAUDE.md
+README.md
+vibespace-backend
+*.md
