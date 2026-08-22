@@ -1,0 +1,181 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+
+    /* Facebook Light Theme Primary Tokens */
+    --bg-main: #F0F2F5;
+    --bg-secondary: #E4E6EB;
+    --bg-surface: #FFFFFF;
+    --bg-card: #FFFFFF;
+    --bg-card-elevated: #F8FAFC;
+    --border-color: #E4E6EB;
+
+    --color-primary: #1877F2;
+    --color-secondary: #0866FF;
+    --color-accent: #2D88FF;
+    --color-pink: #EC4899;
+    --color-purple: #7C3AED;
+
+    --text-primary: #050505;
+    --text-secondary: #65676B;
+    --text-muted: #8A8D91;
+  }
+
+  body {
+    background-color: var(--bg-main);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    overflow-x: hidden;
+  }
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(24, 119, 242, 0.35);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(24, 119, 242, 0.7);
+}
+
+/* Helper Utility Classes */
+.theme-bg-main {
+  background-color: var(--bg-main) !important;
+}
+
+.theme-bg-secondary {
+  background-color: var(--bg-secondary) !important;
+}
+
+.theme-bg-surface {
+  background-color: var(--bg-surface) !important;
+}
+
+.theme-bg-card {
+  background-color: var(--bg-card) !important;
+}
+
+.theme-bg-card-elevated {
+  background-color: var(--bg-card-elevated) !important;
+}
+
+.theme-border {
+  border-color: var(--border-color) !important;
+}
+
+.theme-text-primary {
+  color: var(--text-primary) !important;
+}
+
+.theme-text-secondary {
+  color: var(--text-secondary) !important;
+}
+
+.theme-text-muted {
+  color: var(--text-muted) !important;
+}
+
+/* Card & Button System with Facebook Blue */
+.vibe-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  color: var(--text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.vibe-card:hover {
+  background-color: var(--bg-card-elevated);
+  border-color: rgba(24, 119, 242, 0.35);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.vibe-input {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  transition: all 0.2s ease;
+}
+
+.vibe-input::placeholder {
+  color: var(--text-muted);
+}
+
+.vibe-input:focus {
+  border-color: #1877F2;
+  outline: none;
+  background-color: #FFFFFF;
+  box-shadow: 0 0 0 2px rgba(24, 119, 242, 0.2);
+}
+
+.nav-active {
+  background-color: rgba(24, 119, 242, 0.1) !important;
+  color: #1877F2 !important;
+  font-weight: 700 !important;
+  border-left: 3px solid #1877F2;
+}
+
+/* Facebook Blue Primary Button with Crisp White Text */
+.btn-primary {
+  background: linear-gradient(135deg, #1877F2 0%, #0866FF 100%);
+  color: #FFFFFF !important;
+  font-weight: 600;
+  border-radius: 11px;
+  transition: all 0.2s ease;
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, #166FE5 0%, #0056E0 100%);
+  box-shadow: 0 4px 16px rgba(24, 119, 242, 0.35);
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  font-weight: 500;
+  border-radius: 11px;
+  transition: all 0.2s ease;
+}
+
+.btn-secondary:hover {
+  background-color: #D8DADF;
+  border-color: rgba(24, 119, 242, 0.35);
+}
+
+/* Animations */
+.vinyl-rotation {
+  animation: spin 18s linear infinite;
+}
+
+.vinyl-rotation-paused {
+  animation-play-state: paused;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes floatUp {
+  0% { opacity: 1; transform: translateY(0) scale(0.85); }
+  100% { opacity: 0; transform: translateY(-110px) scale(1.3); }
+}
+
+.animate-float-up {
+  animation: floatUp 2.2s ease-out forwards;
+}

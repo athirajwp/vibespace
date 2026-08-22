@@ -1,0 +1,30 @@
+# dependencies
+/node_modules
+/.pnpm-store
+
+# Next.js build & cache
+/.next/
+/out/
+
+# production & build outputs
+/build
+/dist
+
+# Java / Maven build output
+/vibespace-backend/target/
+vibespace-backend/.classpath
+vibespace-backend/.project
+vibespace-backend/.settings/
+vibespace-backend/.factorypath
+
+# typescript build cache
+*.tsbuildinfo
+
+# logs & OS files
+*.log
+.DS_Store
+Thumbs.db
+
+# local environment variables
+.env*.local
+.env
