@@ -540,19 +540,14 @@ export const INITIAL_LISTENING_SESSION: ListeningSession = {
   roomCode: "VIBE-8842",
   playbackState: {
     sessionId: "session-couple-1",
-    currentTrack: KUTTI_STORY_TRACK,
-    isPlaying: true,
+    currentTrack: null,
+    isPlaying: false,
     currentPosition: 0,
     playbackRate: 1.0,
     updatedAt: Date.now(),
     hostId: CURRENT_USER.id,
   },
-  queue: [
-    { id: "q-1", track: KUTTI_STORY_TRACK, addedBy: CURRENT_USER, votes: 12, votedBy: [CURRENT_USER.id, SAM_PROFILE.id] },
-    { id: "q-2", track: MOCK_TRACKS[1], addedBy: SAM_PROFILE, votes: 9, votedBy: [SAM_PROFILE.id] },
-    { id: "q-3", track: MOCK_TRACKS[2], addedBy: MOCK_USERS[2], votes: 5, votedBy: [MOCK_USERS[2].id] },
-    { id: "q-4", track: MOCK_TRACKS[3], addedBy: CURRENT_USER, votes: 3, votedBy: [] },
-  ],
+  queue: [],
   controlMode: "everyone",
   liveChat: [
     { id: "lc-1", author: CURRENT_USER, text: "Welcome to our room! Synced listening activated 🟢", time: "8:45 PM", system: true },

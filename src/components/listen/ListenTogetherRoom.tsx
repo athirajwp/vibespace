@@ -28,80 +28,16 @@ interface ListenTogetherRoomProps {
   onClose?: () => void;
 }
 
-const DEFAULT_AVAILABLE_SONGS: Track[] = [
-  {
-    id: "GqlGdhjEXNg",
-    title: "Kutti Story (From \"Master\")",
-    artist: "Anirudh Ravichander, Thalapathy Vijay",
-    album: "Master",
-    coverArt: "https://img.youtube.com/vi/GqlGdhjEXNg/hqdefault.jpg",
-    duration: 290,
-    audioUrl: "https://www.youtube-nocookie.com/embed/GqlGdhjEXNg",
-  },
-  {
-    id: "N2z0kXQ_474",
-    title: "Kutty Pattas",
-    artist: "Santhosh Dhayanidhi, Rakshita Suresh",
-    album: "Kutty Pattas",
-    coverArt: "https://img.youtube.com/vi/N2z0kXQ_474/hqdefault.jpg",
-    duration: 230,
-    audioUrl: "https://www.youtube-nocookie.com/embed/N2z0kXQ_474",
-  },
-  {
-    id: "1f_9g2tUjCg",
-    title: "Anul Maale Panithuli",
-    artist: "Harris Jayaraj • V.V. Prasanna",
-    album: "Vaaranam Aayiram",
-    coverArt: "https://img.youtube.com/vi/1f_9g2tUjCg/hqdefault.jpg",
-    duration: 315,
-    audioUrl: "https://www.youtube-nocookie.com/embed/1f_9g2tUjCg",
-  },
-  {
-    id: "v_3Lp9Z-4vI",
-    title: "Pallikoodam - The Farewell Song",
-    artist: "Sanjith Hegde",
-    album: "Natpe Thunai",
-    coverArt: "https://img.youtube.com/vi/v_3Lp9Z-4vI/hqdefault.jpg",
-    duration: 245,
-    audioUrl: "https://www.youtube-nocookie.com/embed/v_3Lp9Z-4vI",
-  },
-  {
-    id: "YxWlaYCA8f0",
-    title: "Arabic Kuthu - Halamithi Habibo",
-    artist: "Anirudh Ravichander",
-    album: "Beast",
-    coverArt: "https://img.youtube.com/vi/YxWlaYCA8f0/hqdefault.jpg",
-    duration: 275,
-    audioUrl: "https://www.youtube-nocookie.com/embed/YxWlaYCA8f0",
-  },
-  {
-    id: "yKNxeF4KMsY",
-    title: "Othayilae",
-    artist: "Harris Jayaraj",
-    album: "Endrendrum Punnagai",
-    coverArt: "https://img.youtube.com/vi/yKNxeF4KMsY/hqdefault.jpg",
-    duration: 285,
-    audioUrl: "https://www.youtube-nocookie.com/embed/yKNxeF4KMsY",
-  },
-  {
-    id: "4NRXx6U8ABQ",
-    title: "Blinding Lights",
-    artist: "The Weeknd",
-    album: "After Hours",
-    coverArt: "https://img.youtube.com/vi/4NRXx6U8ABQ/hqdefault.jpg",
-    duration: 200,
-    audioUrl: "https://www.youtube-nocookie.com/embed/4NRXx6U8ABQ",
-  },
-];
+const DEFAULT_AVAILABLE_SONGS: Track[] = [];
 
 const DEFAULT_PLAYLISTS: CustomPlaylist[] = [
   {
-    id: "pl-curated",
-    name: "Curated Vibe Hits",
-    description: "Hand-picked trending songs for live listening",
-    tracks: DEFAULT_AVAILABLE_SONGS,
+    id: "pl-my-playlist",
+    name: "My Playlist",
+    description: "Your custom music playlist",
+    tracks: [],
     createdAt: 1700000000000,
-    isDefault: true,
+    isDefault: false,
   },
 ];
 
@@ -123,7 +59,7 @@ export const ListenTogetherRoom: React.FC<ListenTogetherRoomProps> = ({ onClose 
   const [isQueueModalOpen, setIsQueueModalOpen] = useState(false);
   const [modalTab, setModalTab] = useState<"playlist" | "queue">("playlist");
   const [queueSearch, setQueueSearch] = useState("");
-  const [searchResults, setSearchResults] = useState<Track[]>(DEFAULT_AVAILABLE_SONGS);
+  const [searchResults, setSearchResults] = useState<Track[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [addedToast, setAddedToast] = useState<string | null>(null);
@@ -131,7 +67,7 @@ export const ListenTogetherRoom: React.FC<ListenTogetherRoomProps> = ({ onClose 
 
   // Custom Playlists State & localStorage Persistence
   const [playlists, setPlaylists] = useState<CustomPlaylist[]>(DEFAULT_PLAYLISTS);
-  const [activePlaylistId, setActivePlaylistId] = useState<string>("pl-curated");
+  const [activePlaylistId, setActivePlaylistId] = useState<string>("pl-my-playlist");
   const [isCreatingPlaylist, setIsCreatingPlaylist] = useState<boolean>(false);
   const [newPlaylistName, setNewPlaylistName] = useState<string>("");
 
@@ -141,13 +77,21 @@ export const ListenTogetherRoom: React.FC<ListenTogetherRoomProps> = ({ onClose 
         const stored = localStorage.getItem("vibespace_custom_playlists");
         if (stored) {
           const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setPlaylists(parsed);
+          if (Array.isArray(parsed)) {
+            // Remove old default "pl-curated" playlist if present
+            const cleaned = parsed.filter((p: CustomPlaylist) => p.id !== "pl-curated");
+            if (cleaned.length > 0) {
+              setPlaylists(cleaned);
+            } else {
+              setPlaylists(DEFAULT_PLAYLISTS);
+            }
           }
         }
         const storedActiveId = localStorage.getItem("vibespace_active_playlist_id");
-        if (storedActiveId) {
+        if (storedActiveId && storedActiveId !== "pl-curated") {
           setActivePlaylistId(storedActiveId);
+        } else {
+          setActivePlaylistId("pl-my-playlist");
         }
       } catch (e) {}
     }
@@ -195,11 +139,12 @@ export const ListenTogetherRoom: React.FC<ListenTogetherRoomProps> = ({ onClose 
 
   const handleDeletePlaylist = (playlistId: string) => {
     const plToDelete = playlists.find((p) => p.id === playlistId);
-    if (!plToDelete || plToDelete.isDefault) return;
+    if (!plToDelete) return;
 
     const updated = playlists.filter((p) => p.id !== playlistId);
-    savePlaylistsToStorage(updated);
-    handleSelectActivePlaylist("pl-curated");
+    const fallbackList = updated.length > 0 ? updated : DEFAULT_PLAYLISTS;
+    savePlaylistsToStorage(fallbackList);
+    handleSelectActivePlaylist(fallbackList[0].id);
     setAddedToast(`Deleted Playlist "${plToDelete.name}"`);
     setTimeout(() => setAddedToast(null), 3000);
   };
@@ -242,15 +187,34 @@ export const ListenTogetherRoom: React.FC<ListenTogetherRoomProps> = ({ onClose 
     savePlaylistsToStorage(updated);
   };
 
-  const activePlaylist = playlists.find((p) => p.id === activePlaylistId) || playlists[0] || DEFAULT_PLAYLISTS[0];
-
-  // Auto-play Kutti Story (Thalapathy Vijay) if no active track is loaded when music section opens
-  useEffect(() => {
-    if (!session.playbackState.currentTrack) {
-      const kuttiStoryTrack: Track = DEFAULT_AVAILABLE_SONGS[0];
-      playTrack(kuttiStoryTrack);
+  const handleAddEntirePlaylistToQueue = (playlist: CustomPlaylist) => {
+    if (!playlist.tracks || playlist.tracks.length === 0) {
+      setAddedToast(`Playlist "${playlist.name}" is empty! Add songs to it first.`);
+      setTimeout(() => setAddedToast(null), 3000);
+      return;
     }
-  }, []);
+
+    let addedCount = 0;
+    playlist.tracks.forEach((track) => {
+      const isCurrentlyPlaying = currentTrack?.id === track.id || currentTrack?.title.trim().toLowerCase() === track.title.trim().toLowerCase();
+      const isAlreadyInQueue = session.queue.some(
+        (item) => item.track.id === track.id || item.track.title.trim().toLowerCase() === track.title.trim().toLowerCase()
+      );
+      if (!isCurrentlyPlaying && !isAlreadyInQueue) {
+        addToQueue(track);
+        addedCount++;
+      }
+    });
+
+    if (addedCount > 0) {
+      setAddedToast(`Added ${addedCount} song${addedCount > 1 ? "s" : ""} from "${playlist.name}" to Queue! 🎉`);
+    } else {
+      setAddedToast(`All songs from "${playlist.name}" are already in queue or playing! ℹ️`);
+    }
+    setTimeout(() => setAddedToast(null), 3000);
+  };
+
+  const activePlaylist = playlists.find((p) => p.id === activePlaylistId) || playlists[0] || DEFAULT_PLAYLISTS[0];
 
   // Close search dropdown on outside click
   useEffect(() => {
@@ -269,7 +233,7 @@ export const ListenTogetherRoom: React.FC<ListenTogetherRoomProps> = ({ onClose 
   // Live YouTube Music Search Engine for ADD SONG TO QUEUE
   useEffect(() => {
     if (!queueSearch.trim()) {
-      setSearchResults(DEFAULT_AVAILABLE_SONGS);
+      setSearchResults([]);
       return;
     }
 
@@ -294,10 +258,10 @@ export const ListenTogetherRoom: React.FC<ListenTogetherRoomProps> = ({ onClose 
           });
           setSearchResults(formattedTracks);
         } else {
-          setSearchResults(DEFAULT_AVAILABLE_SONGS);
+          setSearchResults([]);
         }
       } catch (err) {
-        setSearchResults(DEFAULT_AVAILABLE_SONGS);
+        setSearchResults([]);
       } finally {
         setIsSearching(false);
       }
@@ -770,16 +734,29 @@ export const ListenTogetherRoom: React.FC<ListenTogetherRoomProps> = ({ onClose 
                     </h4>
                   </div>
 
-                  {!activePlaylist.isDefault && (
-                    <button
-                      onClick={() => handleDeletePlaylist(activePlaylist.id)}
-                      className="text-xs text-rose-500 hover:text-rose-600 font-bold flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-rose-50 transition-colors"
-                      title="Delete this Playlist"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>Delete Playlist</span>
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {activePlaylist.tracks.length > 0 && (
+                      <button
+                        onClick={() => handleAddEntirePlaylistToQueue(activePlaylist)}
+                        className="text-[11px] bg-[#1877F2] hover:bg-blue-600 text-white font-extrabold px-2.5 py-1 rounded-xl flex items-center gap-1 shadow-sm active:scale-95 transition-all"
+                        title="Add all songs in this playlist to live room queue"
+                      >
+                        <Plus className="w-3 h-3 text-white" />
+                        <span>Add All to Queue</span>
+                      </button>
+                    )}
+
+                    {!activePlaylist.isDefault && (
+                      <button
+                        onClick={() => handleDeletePlaylist(activePlaylist.id)}
+                        className="text-xs text-rose-500 hover:text-rose-600 font-bold flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-rose-50 transition-colors"
+                        title="Delete this Playlist"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Delete</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Tracks List of Active Playlist */}
@@ -855,14 +832,43 @@ export const ListenTogetherRoom: React.FC<ListenTogetherRoomProps> = ({ onClose 
                 </div>
               </div>
             ) : (
-              <div className="flex-1 overflow-y-auto space-y-2 pr-1 pt-3 border-t border-[#E4E6EB]">
+              <div className="flex-1 overflow-y-auto space-y-3 pr-1 pt-2">
+                {/* User's Created Playlists at Top of Queue Tab */}
+                <div className="space-y-2 pb-3 border-b border-[#E4E6EB]">
+                  <label className="text-xs font-extrabold text-[#1877F2] uppercase tracking-wider flex items-center gap-1.5">
+                    <ListMusic className="w-3.5 h-3.5 text-[#1877F2]" />
+                    <span>Add Playlist to Queue</span>
+                  </label>
+
+                  {playlists.length === 0 ? (
+                    <p className="text-[11px] text-[#65676B] font-medium">No playlists found. Create one in Playlist tab!</p>
+                  ) : (
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+                      {playlists.map((pl) => (
+                        <button
+                          key={pl.id}
+                          onClick={() => handleAddEntirePlaylistToQueue(pl)}
+                          className="px-3 py-1.5 rounded-full text-xs font-extrabold whitespace-nowrap flex items-center gap-1.5 bg-[#1877F2]/10 hover:bg-[#1877F2] hover:text-white border border-[#1877F2]/30 text-[#1877F2] shadow-sm active:scale-95 transition-all group"
+                          title={`Click to add all ${pl.tracks.length} songs from "${pl.name}" to live room queue`}
+                        >
+                          <Plus className="w-3.5 h-3.5 text-[#1877F2] group-hover:text-white" />
+                          <span>{pl.name}</span>
+                          <span className="w-4 h-4 rounded-full bg-purple-600 text-white font-extrabold text-[9px] flex items-center justify-center border border-white/40">
+                            {pl.tracks.length}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <label className="text-xs font-extrabold text-[#65676B] uppercase tracking-wider block">
                   Current Room Queue ({session.queue.length})
                 </label>
 
                 {session.queue.length === 0 ? (
                   <div className="text-center py-6 text-[#65676B] text-xs font-medium">
-                    Queue is empty. Search YouTube Music above or select from Playlist tab!
+                    Queue is empty. Click a playlist above or search YouTube Music to queue songs!
                   </div>
                 ) : (
                   session.queue.map((item) => (
