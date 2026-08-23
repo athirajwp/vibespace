@@ -1,4 +1,4 @@
-export type UserRole = "user" | "creator" | "admin";
+export type UserRole = "user" | "creator" | "admin" | (string & {});
 
 export interface UserProfile {
   id: string;
@@ -19,6 +19,7 @@ export interface UserProfile {
   joinedDate: string;
   onlineStatus?: "online" | "listening" | "offline";
   currentTrack?: Track;
+  role?: UserRole;
 }
 
 export interface Track {
@@ -245,9 +246,17 @@ export interface Community {
   rules: string[];
 }
 
+export interface FriendRequest {
+  id: string;
+  fromUser: UserProfile;
+  toUserId: string;
+  status: "pending" | "accepted" | "declined";
+  createdAt: string;
+}
+
 export interface NotificationItem {
   id: string;
-  type: "like" | "comment" | "follow" | "message" | "space-invite" | "listen-invite" | "playlist-collab";
+  type: "like" | "comment" | "follow" | "message" | "space-invite" | "listen-invite" | "playlist-collab" | "friend-request" | "friend-accepted";
   actor: UserProfile;
   text: string;
   time: string;

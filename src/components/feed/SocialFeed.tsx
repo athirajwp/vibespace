@@ -24,6 +24,8 @@ interface SocialFeedProps {
   onStartListeningSession: (track: Track) => void;
   onAddToQueue: (track: Track) => void;
   onOpenCreatePost: () => void;
+  onToggleBookmark?: (postId: string) => void;
+  onPostsChange?: (posts: Post[]) => void;
 }
 
 export const SocialFeed: React.FC<SocialFeedProps> = ({
@@ -33,6 +35,8 @@ export const SocialFeed: React.FC<SocialFeedProps> = ({
   onStartListeningSession,
   onAddToQueue,
   onOpenCreatePost,
+  onToggleBookmark,
+  onPostsChange,
 }) => {
   const [posts, setPosts] = useState<Post[]>(initialPosts);
   const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
@@ -54,7 +58,11 @@ export const SocialFeed: React.FC<SocialFeedProps> = ({
   }, []);
 
   const handleDeletePost = (postId: string) => {
-    setPosts((prev) => prev.filter((p) => p.id !== postId));
+    setPosts((prev) => {
+      const updated = prev.filter((p) => p.id !== postId);
+      if (onPostsChange) onPostsChange(updated);
+      return updated;
+    });
   };
 
   const handleCopyLink = (postId: string) => {
@@ -70,8 +78,8 @@ export const SocialFeed: React.FC<SocialFeedProps> = ({
   };
 
   const handleLike = (postId: string) => {
-    setPosts((prev) =>
-      prev.map((p) => {
+    setPosts((prev) => {
+      const updated = prev.map((p) => {
         if (p.id === postId) {
           const isLiked = !p.isLiked;
           return {
@@ -81,19 +89,26 @@ export const SocialFeed: React.FC<SocialFeedProps> = ({
           };
         }
         return p;
-      })
-    );
+      });
+      if (onPostsChange) onPostsChange(updated);
+      return updated;
+    });
   };
 
   const handleBookmark = (postId: string) => {
-    setPosts((prev) =>
-      prev.map((p) => {
+    if (onToggleBookmark) {
+      onToggleBookmark(postId);
+    }
+    setPosts((prev) => {
+      const updated = prev.map((p) => {
         if (p.id === postId) {
           return { ...p, isSaved: !p.isSaved };
         }
         return p;
-      })
-    );
+      });
+      if (onPostsChange) onPostsChange(updated);
+      return updated;
+    });
   };
 
   const handleVotePoll = (postId: string, optionId: string) => {

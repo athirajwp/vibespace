@@ -1,18 +1,16 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { X, Lock, User, ArrowRight, Sparkles, UserPlus, LogIn, AlertCircle } from "lucide-react";
+import { Lock, User, ArrowRight, Sparkles, UserPlus, LogIn, AlertCircle } from "lucide-react";
+import { Logo } from "@/components/brand/Logo";
 import { UserProfile } from "@/types";
 import { CURRENT_USER } from "@/lib/mock-data";
 
-interface AuthModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+interface LoginPageViewProps {
   onSuccess: (user: UserProfile) => void;
-  isLoggedOut?: boolean;
 }
 
-export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess, isLoggedOut }) => {
+export const LoginPageView: React.FC<LoginPageViewProps> = ({ onSuccess }) => {
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -33,7 +31,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
           if (Array.isArray(parsed) && parsed.length > 0) {
             setRegisteredAccounts(parsed);
           } else {
-            // Seed with default CURRENT_USER account
             const defaultAcc = { ...CURRENT_USER, password: "password" };
             setRegisteredAccounts([defaultAcc]);
             localStorage.setItem("vibespace_registered_accounts", JSON.stringify([defaultAcc]));
@@ -45,9 +42,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
         }
       } catch (e) {}
     }
-  }, [isOpen]);
-
-  if (!isOpen) return null;
+  }, []);
 
   const handleRegister = (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,7 +69,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
       return;
     }
 
-    // Generate vibrant random avatar for the new user
     const avatarSeeds = [
       "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=250&auto=format&fit=crop",
       "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=250&auto=format&fit=crop",
@@ -116,7 +110,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
     }
 
     onSuccess(newUser);
-    onClose();
   };
 
   const handleLogin = (e: React.FormEvent) => {
@@ -144,52 +137,41 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
     }
 
     onSuccess(matchedUser);
-    onClose();
-  };
-
-  const handleSelectQuickAccount = (acc: UserProfile) => {
-    onSuccess(acc);
-    onClose();
   };
 
   return (
-    <div className="fixed inset-0 bg-black/85 backdrop-blur-lg flex items-center justify-center p-4 z-[400] animate-in fade-in duration-200 select-none">
-      <div className="relative overflow-hidden bg-gradient-to-br from-white via-blue-50/90 to-indigo-50/70 border border-[#1877F2]/30 w-full max-w-md rounded-3xl text-[#050505] shadow-2xl shadow-blue-500/10 p-6 sm:p-8 backdrop-blur-2xl">
-        {/* Soft Ambient Mesh Glow Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-r from-[#1877F2]/10 via-purple-500/10 to-pink-500/5 pointer-events-none" />
+    <div className="min-h-screen w-full bg-[#F0F2F5] flex flex-col items-center justify-center p-4 relative overflow-hidden select-none">
+      {/* Background Glow Blobs */}
+      <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
 
-        {!isLoggedOut && (
-          <button
-            onClick={onClose}
-            className="absolute top-5 right-5 p-2 rounded-full bg-[#F0F2F5] hover:bg-[#E4E6EB] text-[#65676B] hover:text-[#050505] transition-colors relative z-10"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        )}
+      {/* Brand Header */}
+      <div className="mb-6 text-center z-10 flex flex-col items-center">
+        <Logo size="lg" />
+        <p className="text-xs text-[#65676B] font-bold mt-2">
+          Connect, share, and listen to music together.
+        </p>
+      </div>
 
+      {/* Login Card */}
+      <div className="relative w-full max-w-md bg-white/95 backdrop-blur-2xl rounded-3xl border border-[#E4E6EB] p-6 sm:p-8 shadow-2xl z-10">
         {/* Header */}
-        <div className="text-center mb-6 relative z-10">
+        <div className="text-center mb-6">
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#1877F2] to-purple-600 p-0.5 mx-auto mb-3 shadow-lg shadow-blue-500/25 flex items-center justify-center text-white">
             <Sparkles className="w-6 h-6 text-white" />
           </div>
           <h2 className="font-extrabold text-2xl text-[#050505]">
-            {isLoggedOut
-              ? "Logged Out of VibeSpace"
-              : mode === "login"
-              ? "Welcome Back to VibeSpace"
-              : "Join VibeSpace"}
+            {mode === "login" ? "Log In to VibeSpace" : "Create New Account"}
           </h2>
           <p className="text-xs text-[#65676B] font-semibold mt-1">
-            {isLoggedOut
-              ? "Log in to your account or create a new user to continue"
-              : mode === "login"
+            {mode === "login"
               ? "Enter your username and password to log in"
               : "Choose your unique username and password to get started"}
           </p>
         </div>
 
-        {/* Tab Switcher: Log In vs Create User */}
-        <div className="grid grid-cols-2 gap-1.5 p-1 bg-white/80 rounded-2xl border border-[#1877F2]/20 mb-5 relative z-10 shadow-xs">
+        {/* Mode Switcher */}
+        <div className="grid grid-cols-2 gap-1.5 p-1 bg-[#F0F2F5] rounded-2xl border border-[#E4E6EB] mb-5 shadow-xs">
           <button
             type="button"
             onClick={() => {
@@ -199,7 +181,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
             className={`py-2 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition-all ${
               mode === "login"
                 ? "bg-[#1877F2] text-white shadow-md shadow-blue-500/20"
-                : "text-[#65676B] hover:text-[#050505] hover:bg-[#F0F2F5]"
+                : "text-[#65676B] hover:text-[#050505] hover:bg-white/60"
             }`}
           >
             <LogIn className="w-4 h-4" />
@@ -214,7 +196,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
             className={`py-2 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition-all ${
               mode === "signup"
                 ? "bg-[#1877F2] text-white shadow-md shadow-blue-500/20"
-                : "text-[#65676B] hover:text-[#050505] hover:bg-[#F0F2F5]"
+                : "text-[#65676B] hover:text-[#050505] hover:bg-white/60"
             }`}
           >
             <UserPlus className="w-4 h-4" />
@@ -222,7 +204,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
           </button>
         </div>
 
-        {/* Error Alert Message */}
+        {/* Error Alert */}
         {errorMessage && (
           <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-600 text-xs font-bold flex items-start gap-2 animate-in fade-in duration-200">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -231,8 +213,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
         )}
 
         {/* Main Authentication Form */}
-        <form onSubmit={mode === "login" ? handleLogin : handleRegister} className="space-y-4 relative z-10">
-          {/* Username Input */}
+        <form onSubmit={mode === "login" ? handleLogin : handleRegister} className="space-y-4">
+          {/* Username */}
           <div className="space-y-1.5">
             <label className="text-xs font-extrabold text-[#050505]">Username</label>
             <div className="relative">
@@ -243,12 +225,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="Choose username (e.g. alex_vibes)"
-                className="w-full pl-8 pr-4 py-2.5 rounded-xl bg-white border border-[#1877F2]/30 text-xs font-bold text-[#050505] placeholder-[#65676B] focus:outline-none focus:border-[#1877F2] focus:ring-2 focus:ring-[#1877F2]/20 transition-all shadow-xs"
+                className="w-full pl-8 pr-4 py-2.5 rounded-xl bg-[#F0F2F5] border border-[#E4E6EB] text-xs font-bold text-[#050505] placeholder-[#65676B] focus:outline-none focus:bg-white focus:border-[#1877F2] focus:ring-2 focus:ring-[#1877F2]/20 transition-all shadow-xs"
               />
             </div>
           </div>
 
-          {/* Password Input */}
+          {/* Password */}
           <div className="space-y-1.5">
             <label className="text-xs font-extrabold text-[#050505]">Password</label>
             <div className="relative">
@@ -259,15 +241,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter password"
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-[#1877F2]/30 text-xs font-bold text-[#050505] placeholder-[#65676B] focus:outline-none focus:border-[#1877F2] focus:ring-2 focus:ring-[#1877F2]/20 transition-all shadow-xs"
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#F0F2F5] border border-[#E4E6EB] text-xs font-bold text-[#050505] placeholder-[#65676B] focus:outline-none focus:bg-white focus:border-[#1877F2] focus:ring-2 focus:ring-[#1877F2]/20 transition-all shadow-xs"
               />
             </div>
           </div>
 
-          {/* Full Name Input (Signup Mode Only) */}
+          {/* Full Name (Signup Only) */}
           {mode === "signup" && (
             <div className="space-y-1.5">
-              <label className="text-xs font-extrabold text-[#050505]">Full Name <span className="text-[10px] font-normal text-[#65676B]">(Optional)</span></label>
+              <label className="text-xs font-extrabold text-[#050505]">
+                Full Name <span className="text-[10px] font-normal text-[#65676B]">(Optional)</span>
+              </label>
               <div className="relative">
                 <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#65676B]" />
                 <input
@@ -275,7 +259,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   placeholder="Display name (e.g. Alex Rivera)"
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-[#1877F2]/30 text-xs font-bold text-[#050505] placeholder-[#65676B] focus:outline-none focus:border-[#1877F2] focus:ring-2 focus:ring-[#1877F2]/20 transition-all shadow-xs"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#F0F2F5] border border-[#E4E6EB] text-xs font-bold text-[#050505] placeholder-[#65676B] focus:outline-none focus:bg-white focus:border-[#1877F2] focus:ring-2 focus:ring-[#1877F2]/20 transition-all shadow-xs"
                 />
               </div>
             </div>
@@ -291,22 +275,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
           </button>
         </form>
 
-        {/* Existing Accounts List for Fast Switching */}
+        {/* Registered Accounts Carousel for Quick Switch */}
         {registeredAccounts.length > 0 && (
-          <div className="mt-5 pt-4 border-t border-[#E4E6EB] relative z-10 space-y-2">
+          <div className="mt-6 pt-4 border-t border-[#E4E6EB] space-y-2">
             <span className="text-[10px] font-extrabold text-[#65676B] uppercase tracking-wider block">
-              Quick Switch Accounts:
+              Quick Log In As:
             </span>
             <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
               {registeredAccounts.map((acc) => (
                 <button
                   key={acc.id}
-                  onClick={() => handleSelectQuickAccount(acc)}
-                  className="p-1.5 pr-3 rounded-full bg-white border border-[#1877F2]/25 hover:border-[#1877F2] flex items-center gap-2 text-xs font-bold text-[#050505] shrink-0 hover:scale-105 active:scale-95 transition-all shadow-xs"
+                  onClick={() => onSuccess(acc)}
+                  className="p-1.5 pr-3 rounded-full bg-[#F0F2F5] border border-[#E4E6EB] hover:border-[#1877F2] hover:bg-white flex items-center gap-2 text-xs font-bold text-[#050505] shrink-0 hover:scale-105 active:scale-95 transition-all shadow-xs"
                   title={`Log in as ${acc.name} (@${acc.username})`}
                 >
                   <img src={acc.avatar} alt={acc.name} className="w-6 h-6 rounded-full object-cover border border-[#1877F2]" />
-                  <span className="truncate max-w-[100px]">{acc.name}</span>
+                  <span className="truncate max-w-[110px]">{acc.name}</span>
                 </button>
               ))}
             </div>

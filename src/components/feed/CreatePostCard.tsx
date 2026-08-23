@@ -405,7 +405,7 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
       </div>
 
       {/* Action Chips Grid */}
-      <div className="pt-2 border-t border-[#E4E6EB]/80 grid grid-cols-5 gap-1 text-center text-xs font-semibold text-[#65676B]">
+      <div className="pt-2 border-t border-[#E4E6EB]/80 grid grid-cols-3 gap-2 text-center text-xs font-semibold text-[#65676B]">
         {/* Photo Button */}
         <button
           onClick={handlePhotoClick}
@@ -432,30 +432,6 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
         >
           <Video className="w-4 h-4 text-pink-500 shrink-0" />
           <span className="truncate">Video</span>
-        </button>
-
-        {/* Music Button */}
-        <button
-          onClick={() => handleSelectMusic()}
-          className={`flex items-center justify-center gap-1 sm:gap-1.5 py-2 px-1 rounded-xl transition-all ${
-            mode === "music"
-              ? "bg-purple-500/15 text-purple-600 font-bold"
-              : "hover:bg-[#F0F2F5] hover:text-[#050505]"
-          }`}
-          title="Attach Music"
-        >
-          <Music className="w-4 h-4 text-purple-500 shrink-0" />
-          <span className="truncate">Music</span>
-        </button>
-
-        {/* Moment Button */}
-        <button
-          onClick={onOpenCreateModal}
-          className="flex items-center justify-center gap-1 sm:gap-1.5 py-2 px-1 rounded-xl hover:bg-[#F0F2F5] hover:text-[#050505] transition-all"
-          title="Create Moment"
-        >
-          <Sparkles className="w-4 h-4 text-cyan-500 shrink-0" />
-          <span className="truncate">Moment</span>
         </button>
 
         {/* Poll Button */}

@@ -23,6 +23,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
   activeTab,
   setActiveTab,
   unreadMessagesCount,
+  currentUser,
 }) => {
   const items = [
     {
@@ -71,11 +72,23 @@ export const MobileNav: React.FC<MobileNavProps> = ({
             title={item.label}
           >
             <div className="relative flex items-center justify-center">
-              <Icon
-                className={`w-6 h-6 stroke-[2] ${
-                  isActive ? "text-[#1877F2]" : "text-[#65676B]"
-                }`}
-              />
+              {item.id === "profile" && currentUser ? (
+                <img
+                  src={currentUser.avatar}
+                  alt={currentUser.name}
+                  className={`w-6 h-6 rounded-full object-cover border transition-all ${
+                    isActive
+                      ? "border-[#1877F2] ring-2 ring-[#1877F2]/40"
+                      : "border-[#65676B]/40"
+                  }`}
+                />
+              ) : (
+                <Icon
+                  className={`w-6 h-6 stroke-[2] ${
+                    isActive ? "text-[#1877F2]" : "text-[#65676B]"
+                  }`}
+                />
+              )}
 
               {item.badge && item.badge > 0 ? (
                 <span className="absolute -top-1 -right-2 w-4 h-4 rounded-full bg-[#1877F2] text-white text-[9px] font-bold flex items-center justify-center shadow-xs">

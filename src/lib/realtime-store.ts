@@ -29,6 +29,11 @@ class RealtimeSessionStore {
   private hydrateFromStorage() {
     if (typeof window === "undefined") return;
     try {
+      const savedUser = localStorage.getItem("vibespace_user_profile");
+      if (savedUser) {
+        const parsedUser: UserProfile = JSON.parse(savedUser);
+        this.updateCurrentUser(parsedUser);
+      }
       const savedTrack = localStorage.getItem("vibespace_last_track");
       if (savedTrack) {
         const parsedTrack: Track = JSON.parse(savedTrack);
@@ -403,6 +408,41 @@ class RealtimeSessionStore {
     this.saveStateToStorage();
     this.notify();
   }
+
+  public updateCurrentUser(updatedUser: Partial<UserProfile>) {
+    if (this.session.host) {
+      this.session.host = { ...this.session.host, ...updatedUser };
+    }
+
+    if (this.session.participants) {
+      this.session.participants = this.session.participants.map((p) => {
+        if (!updatedUser.id || p.id === updatedUser.id || p.id === CURRENT_USER.id) {
+          return { ...p, ...updatedUser };
+        }
+        return p;
+      });
+    }
+
+    if (this.session.liveChat) {
+      this.session.liveChat = this.session.liveChat.map((msg) => {
+        if (msg.author && (!updatedUser.id || msg.author.id === updatedUser.id || msg.author.id === CURRENT_USER.id)) {
+          return { ...msg, author: { ...msg.author, ...updatedUser } };
+        }
+        return msg;
+      });
+    }
+
+    if (this.session.queue) {
+      this.session.queue = this.session.queue.map((item) => {
+        if (item.addedBy && (!updatedUser.id || item.addedBy.id === updatedUser.id || item.addedBy.id === CURRENT_USER.id)) {
+          return { ...item, addedBy: { ...item.addedBy, ...updatedUser } };
+        }
+        return item;
+      });
+    }
+
+    this.notify();
+  }
 }
 
 export const realtimeStore = new RealtimeSessionStore();
@@ -432,24 +472,94 @@ export function useRealtimeSession() {
     joinSession: (user: UserProfile) => realtimeStore.joinSession(user),
     leaveSession: (userId: string) => realtimeStore.leaveSession(userId),
     updateCurrentTrackDuration: (sec: number) => realtimeStore.updateCurrentTrackDuration(sec),
+    updateCurrentUser: (u: Partial<UserProfile>) => realtimeStore.updateCurrentUser(u),
   };
 }
 
 export function useNotifications() {
-  const [notifications, setNotifications] = useState<NotificationItem[]>(
-    realtimeStore.getNotifications()
-  );
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+
+  const loadNotifications = () => {
+    if (typeof window === "undefined") return;
+    try {
+      const currentUserStr = localStorage.getItem("vibespace_user_profile");
+      let userId = "";
+      if (currentUserStr) {
+        const parsed = JSON.parse(currentUserStr);
+        if (parsed && parsed.id) userId = parsed.id;
+      }
+
+      let userNotifs: NotificationItem[] = [];
+      let globalNotifs: NotificationItem[] = [];
+
+      if (userId) {
+        const userKey = `vibespace_notifications_${userId}`;
+        const storedUserNotifs = localStorage.getItem(userKey);
+        if (storedUserNotifs) {
+          const parsed = JSON.parse(storedUserNotifs);
+          if (Array.isArray(parsed)) userNotifs = parsed;
+        }
+      }
+
+      const storedGlobal = localStorage.getItem("vibespace_notifications");
+      if (storedGlobal) {
+        const parsed = JSON.parse(storedGlobal);
+        if (Array.isArray(parsed)) {
+          globalNotifs = parsed.filter(
+            (n: NotificationItem) => !n.targetId || n.targetId === userId
+          );
+        }
+      }
+
+      // Combine and deduplicate by notification ID
+      const combinedMap = new Map<string, NotificationItem>();
+      userNotifs.forEach((n) => combinedMap.set(n.id, n));
+      globalNotifs.forEach((n) => {
+        if (!combinedMap.has(n.id)) combinedMap.set(n.id, n);
+      });
+
+      const finalNotifs = Array.from(combinedMap.values());
+      if (finalNotifs.length > 0) {
+        setNotifications(finalNotifs);
+      } else {
+        setNotifications(realtimeStore.getNotifications());
+      }
+    } catch (e) {
+      setNotifications(realtimeStore.getNotifications());
+    }
+  };
 
   useEffect(() => {
+    loadNotifications();
     const unsubscribe = realtimeStore.subscribe(() => {
-      setNotifications([...realtimeStore.getNotifications()]);
+      loadNotifications();
     });
-    return unsubscribe;
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key?.startsWith("vibespace_notifications")) {
+        loadNotifications();
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+    const interval = setInterval(loadNotifications, 1000);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener("storage", handleStorage);
+      clearInterval(interval);
+    };
   }, []);
+
+  const markRead = (id: string) => {
+    realtimeStore.markNotificationRead(id);
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+    );
+  };
 
   return {
     notifications,
-    markRead: (id: string) => realtimeStore.markNotificationRead(id),
+    markRead,
     unreadCount: notifications.filter((n) => !n.read).length,
   };
 }

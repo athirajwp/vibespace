@@ -47,6 +47,28 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [username, setUsername] = useState(user.username);
   const [bio, setBio] = useState(user.bio);
   const [privacy, setPrivacy] = useState(user.privacy || "public");
+  const [avatar, setAvatar] = useState(user.avatar);
+
+  React.useEffect(() => {
+    setName(user.name);
+    setUsername(user.username);
+    setBio(user.bio);
+    setPrivacy(user.privacy || "public");
+    setAvatar(user.avatar);
+  }, [user]);
+
+  const handleAvatarFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setAvatar(event.target.result as string);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   // Audio / Listen Together Settings State
   const [audioQuality, setAudioQuality] = useState<"standard" | "high" | "lossless">("high");
@@ -87,6 +109,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         username,
         bio,
         privacy,
+        avatar,
       });
     }
     setSaveToast("Settings saved successfully!");
@@ -179,14 +202,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 {/* Avatar Preview */}
                 <div className="flex items-center gap-4">
                   <img
-                    src={user.avatar}
-                    alt={user.name}
-                    className="w-16 h-16 rounded-full object-cover border-2 border-[#1877F2]"
+                    src={avatar}
+                    alt={name}
+                    className="w-16 h-16 rounded-full object-cover border-2 border-[#1877F2] shadow-sm"
                   />
                   <div>
-                    <button className="btn-secondary py-1.5 px-3 text-xs font-bold text-[#050505]">
-                      Change Avatar
-                    </button>
+                    <label className="btn-secondary py-1.5 px-3 text-xs font-bold text-[#050505] cursor-pointer inline-flex items-center gap-1.5 active:scale-95 transition-transform">
+                      <span>Change Avatar</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleAvatarFileChange}
+                        className="hidden"
+                      />
+                    </label>
                     <p className="text-[10px] text-[#65676B] mt-1">
                       JPG, PNG or GIF. Max 5MB.
                     </p>

@@ -1,5 +1,3 @@
-"use client";
-
 import React from "react";
 import {
   Home,
@@ -9,6 +7,7 @@ import {
   User,
   Settings,
   PlusCircle,
+  LogOut,
 } from "lucide-react";
 import { UserProfile } from "@/types";
 import { NavTab } from "./Sidebar";
@@ -20,6 +19,7 @@ interface LeftSidebarProps {
   unreadNotificationsCount?: number;
   currentUser: UserProfile;
   onOpenCreatePost: () => void;
+  onOpenAuth?: () => void;
 }
 
 export const LeftSidebar: React.FC<LeftSidebarProps> = ({
@@ -28,6 +28,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   unreadMessagesCount,
   currentUser,
   onOpenCreatePost,
+  onOpenAuth,
 }) => {
   const navItems = [
     { id: "home", label: "Home", icon: Home },
@@ -114,6 +115,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
         <button
           onClick={() => setActiveTab("settings")}
           className="p-2 rounded-lg text-[#65676B] hover:text-[#050505] hover:bg-[#E4E6EB]"
+          title="Settings"
         >
           <Settings className="w-4 h-4" />
         </button>

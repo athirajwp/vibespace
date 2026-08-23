@@ -5,16 +5,13 @@ spring:
   application:
     name: vibespace-backend
   datasource:
-    url: jdbc:h2:mem:vibespacedb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
-    driver-class-name: org.h2.Driver
-    username: sa
-    password: 
-  h2:
-    console:
-      enabled: true
-      path: /h2-console
+    # MySQL Database Connection
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/vibespacedb?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: ${SPRING_DATASOURCE_USERNAME:vibespace}
+    password: ${SPRING_DATASOURCE_PASSWORD:tiger}
   jpa:
-    database-platform: org.hibernate.dialect.H2Dialect
+    database-platform: org.hibernate.dialect.MySQLDialect
     hibernate:
       ddl-auto: update
     show-sql: false
@@ -23,3 +20,4 @@ logging:
   level:
     root: INFO
     com.vibespace: DEBUG
+
