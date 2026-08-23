@@ -79,6 +79,30 @@ export const YouTubeAudioPlayer: React.FC<YouTubeAudioPlayerProps> = ({
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  // Progress Scrubber Seeking Ref
+  const prevPositionRef = useRef<number | undefined>(undefined);
+
+  // Reset position to 0 whenever a new song is played or Next button is pressed
+  useEffect(() => {
+    prevPositionRef.current = 0;
+    if (!iframeRef.current) return;
+    const sendZeroSeek = () => {
+      try {
+        iframeRef.current?.contentWindow?.postMessage(
+          JSON.stringify({ event: "command", func: "seekTo", args: [0, true] }),
+          "*"
+        );
+      } catch (e) {}
+    };
+    sendZeroSeek();
+    const t1 = setTimeout(sendZeroSeek, 300);
+    const t2 = setTimeout(sendZeroSeek, 800);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [videoId]);
+
   // Synchronize Play / Pause with System Controls
   useEffect(() => {
     if (!iframeRef.current) return;
@@ -98,7 +122,6 @@ export const YouTubeAudioPlayer: React.FC<YouTubeAudioPlayerProps> = ({
   }, [isPlaying, videoId]);
 
   // Synchronize Progress Scrubber Seeking with YouTube Engine
-  const prevPositionRef = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (!iframeRef.current || currentPosition === undefined) return;
     const delta = Math.abs(currentPosition - (prevPositionRef.current ?? currentPosition));
@@ -119,8 +142,8 @@ export const YouTubeAudioPlayer: React.FC<YouTubeAudioPlayerProps> = ({
       title: trackItem.title,
       artist: trackItem.artist || "YouTube Artist",
       album: trackItem.album || "YouTube Music",
-      coverArt: trackItem.cover || `https://img.youtube.com/vi/${trackItem.id}/hqdefault.jpg`,
-      duration: 240,
+      coverArt: trackItem.cover || `https://i.ytimg.com/vi/${trackItem.id}/hqdefault.jpg`,
+      duration: trackItem.duration || 215,
       audioUrl: `https://www.youtube-nocookie.com/embed/${trackItem.id}`,
     };
 
@@ -139,8 +162,8 @@ export const YouTubeAudioPlayer: React.FC<YouTubeAudioPlayerProps> = ({
       title: trackItem.title,
       artist: trackItem.artist || "YouTube Artist",
       album: trackItem.album || "YouTube Music",
-      coverArt: trackItem.cover || `https://img.youtube.com/vi/${trackItem.id}/hqdefault.jpg`,
-      duration: 240,
+      coverArt: trackItem.cover || `https://i.ytimg.com/vi/${trackItem.id}/hqdefault.jpg`,
+      duration: trackItem.duration || 215,
       audioUrl: `https://www.youtube-nocookie.com/embed/${trackItem.id}`,
     };
 

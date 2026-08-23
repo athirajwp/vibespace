@@ -7,6 +7,11 @@ import {
   SkipBack,
   SkipForward,
   Headphones,
+  Users,
+  UserPlus,
+  UserMinus,
+  Copy,
+  Share2,
   ListMusic,
   ListOrdered,
   Plus,
@@ -23,14 +28,13 @@ import { FloatingReactions } from "./FloatingReactions";
 import { QueueManager } from "./QueueManager";
 import { YouTubeAudioPlayer } from "./YouTubeAudioPlayer";
 import { Track, CustomPlaylist } from "@/types";
+import { MOCK_USERS } from "@/lib/mock-data";
 
 interface ListenTogetherRoomProps {
   onClose?: () => void;
 }
 
-const DEFAULT_AVAILABLE_SONGS: Track[] = [];
-
-const DEFAULT_PLAYLISTS: CustomPlaylist[] = [
+export const DEFAULT_PLAYLISTS: CustomPlaylist[] = [
   {
     id: "pl-my-playlist",
     name: "My Playlist",
@@ -52,11 +56,18 @@ export const ListenTogetherRoom: React.FC<ListenTogetherRoomProps> = ({ onClose 
     addToQueue,
     removeFromQueue,
     sendChatMessage,
+    updateCurrentTrackDuration,
+    joinSession,
+    leaveSession,
   } = useRealtimeSession();
 
   const [activeTab, setActiveTab] = useState<"queue" | "chat">("queue");
   const [chatInput, setChatInput] = useState("");
   const [isQueueModalOpen, setIsQueueModalOpen] = useState(false);
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [friendSearch, setFriendSearch] = useState("");
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [invitedUserIds, setInvitedUserIds] = useState<Set<string>>(new Set());
   const [modalTab, setModalTab] = useState<"playlist" | "queue">("playlist");
   const [queueSearch, setQueueSearch] = useState("");
   const [searchResults, setSearchResults] = useState<Track[]>([]);
@@ -64,11 +75,41 @@ export const ListenTogetherRoom: React.FC<ListenTogetherRoomProps> = ({ onClose 
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [addedToast, setAddedToast] = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(false);
+  const [listenMode, setListenModeState] = useState<"solo" | "group">("group");
   const searchSectionRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToChatBottom = () => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
+  };
 
   useEffect(() => {
     setIsMounted(true);
+    if (typeof window !== "undefined") {
+      try {
+        const savedMode = localStorage.getItem("vibespace_listen_mode");
+        if (savedMode === "solo" || savedMode === "group") {
+          setListenModeState(savedMode);
+        }
+      } catch (e) {}
+    }
   }, []);
+
+  const setListenMode = (mode: "solo" | "group") => {
+    setListenModeState(mode);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("vibespace_listen_mode", mode);
+      } catch (e) {}
+    }
+  };
+
+  useEffect(() => {
+    scrollToChatBottom();
+  }, [session.liveChat?.length]);
 
   // Custom Playlists State & localStorage Persistence
   const [playlists, setPlaylists] = useState<CustomPlaylist[]>(DEFAULT_PLAYLISTS);
@@ -235,6 +276,24 @@ export const ListenTogetherRoom: React.FC<ListenTogetherRoomProps> = ({ onClose 
   const playback = session.playbackState;
   const currentTrack = playback.currentTrack;
 
+  // Auto-fetch real track duration from YouTube search API if currentTrack duration is 240 or missing
+  useEffect(() => {
+    if (currentTrack && (currentTrack.duration === 240 || !currentTrack.duration)) {
+      const q = currentTrack.title || currentTrack.id;
+      fetch(`/api/yt-search?q=${encodeURIComponent(q)}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (Array.isArray(data.tracks) && data.tracks.length > 0) {
+            const match = data.tracks.find((t: any) => t.id === currentTrack.id) || data.tracks[0];
+            if (match && match.duration && match.duration !== 240) {
+              updateCurrentTrackDuration(match.duration);
+            }
+          }
+        })
+        .catch(() => {});
+    }
+  }, [currentTrack?.id]);
+
   // Live YouTube Music Search Engine for ADD SONG TO QUEUE
   useEffect(() => {
     if (!queueSearch.trim()) {
@@ -257,7 +316,7 @@ export const ListenTogetherRoom: React.FC<ListenTogetherRoomProps> = ({ onClose 
               artist: t.artist || "YouTube Artist",
               album: t.album || "YouTube Music",
               coverArt: coverUrl,
-              duration: t.duration || 240,
+              duration: t.duration || 215,
               audioUrl: t.audioUrl || `https://www.youtube-nocookie.com/embed/${videoId}`,
             };
           });
@@ -285,12 +344,13 @@ export const ListenTogetherRoom: React.FC<ListenTogetherRoomProps> = ({ onClose 
     if (!chatInput.trim()) return;
     sendChatMessage(chatInput);
     setChatInput("");
+    setTimeout(scrollToChatBottom, 50);
   };
 
   const handleAddTrack = (track: Track) => {
     const isCurrentlyPlaying = currentTrack?.id === track.id || currentTrack?.title.trim().toLowerCase() === track.title.trim().toLowerCase();
-    const isAlreadyInQueue = session.queue.some(
-      (item) => item.track.id === track.id || item.track.title.trim().toLowerCase() === track.title.trim().toLowerCase()
+    const isAlreadyInPlaylist = activePlaylist.tracks.some(
+      (t) => t.id === track.id || t.title.trim().toLowerCase() === track.title.trim().toLowerCase()
     );
 
     if (isCurrentlyPlaying) {
@@ -299,63 +359,185 @@ export const ListenTogetherRoom: React.FC<ListenTogetherRoomProps> = ({ onClose 
       return;
     }
 
-    if (isAlreadyInQueue) {
-      setAddedToast(`"${track.title}" is already in the queue! ⚠️`);
+    if (isAlreadyInPlaylist) {
+      setAddedToast(`"${track.title}" is already in "${activePlaylist.name}"! ⚠️`);
       setTimeout(() => setAddedToast(null), 3000);
       return;
     }
 
-    addToQueue(track);
-    setAddedToast(`Added "${track.title}" to Queue! 🎉`);
+    handleAddTrackToPlaylist(track, activePlaylist.id);
+    setAddedToast(`Added "${track.title}" to "${activePlaylist.name}"! 🎉`);
     setTimeout(() => setAddedToast(null), 3000);
+  };
+
+  const handleCopyRoomCode = () => {
+    const code = session.roomCode || "VIBE-8842";
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(code);
+    }
+    setCopiedCode(true);
+    setAddedToast(`Copied room code "${code}" to clipboard! 📋`);
+    setTimeout(() => setCopiedCode(false), 2000);
+    setTimeout(() => setAddedToast(null), 3000);
+  };
+
+  const handleInviteFriend = (friend: any) => {
+    joinSession(friend);
+    setInvitedUserIds((prev) => new Set([...Array.from(prev), friend.id]));
+    setAddedToast(`Added ${friend.name} to Group Room! 🎉`);
+    setTimeout(() => setAddedToast(null), 3000);
+  };
+
+  const handleRemoveFriend = (friend: any) => {
+    leaveSession(friend.id);
+    setInvitedUserIds((prev) => {
+      const next = new Set(Array.from(prev));
+      next.delete(friend.id);
+      return next;
+    });
+    setAddedToast(`Removed ${friend.name} from group room 🚪`);
+    setTimeout(() => setAddedToast(null), 3000);
+  };
+
+  const handlePlayNextPlaylistTrack = () => {
+    if (activePlaylist.tracks.length > 0) {
+      const currentIndex = activePlaylist.tracks.findIndex((t) => t.id === currentTrack?.id);
+      const nextIndex = (currentIndex + 1) % activePlaylist.tracks.length;
+      playTrack(activePlaylist.tracks[nextIndex]);
+    } else {
+      nextTrack();
+    }
+  };
+
+  const handlePlayPrevPlaylistTrack = () => {
+    if (activePlaylist.tracks.length > 0) {
+      const currentIndex = activePlaylist.tracks.findIndex((t) => t.id === currentTrack?.id);
+      const prevIndex = currentIndex <= 0 ? activePlaylist.tracks.length - 1 : currentIndex - 1;
+      playTrack(activePlaylist.tracks[prevIndex]);
+    } else {
+      prevTrack();
+    }
   };
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-32 select-none">
-      {/* MUSIC ROOM TOP HEADER (SHRUNK BY 30% - SLEEK & COMPACT) */}
-      <div className="relative overflow-hidden p-2.5 sm:p-3 flex flex-col sm:flex-row items-center justify-between gap-2.5 rounded-2xl text-[#050505] shadow-md shadow-blue-500/5 bg-gradient-to-r from-white via-blue-50/70 to-indigo-50/50 border border-[#1877F2]/25 backdrop-blur-2xl">
+      {/* TOP LEVEL MODE SWITCHER BAR: SOLO VIBE vs GROUP ROOM */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-2 bg-gradient-to-r from-white via-blue-50/70 to-indigo-50/50 rounded-2xl border border-[#1877F2]/25 shadow-md backdrop-blur-2xl">
+        <div className="flex items-center gap-2 w-full sm:w-auto flex-1 max-w-sm">
+          <button
+            onClick={() => setListenMode("solo")}
+            className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition-all shadow-sm ${
+              listenMode === "solo"
+                ? "bg-[#1877F2] text-white shadow-md shadow-blue-500/25 active:scale-95 border border-[#1877F2]"
+                : "bg-white/80 text-[#65676B] hover:text-[#050505] hover:bg-white border border-[#1877F2]/15"
+            }`}
+          >
+            <Headphones className="w-4 h-4" />
+            <span>Solo Vibe</span>
+          </button>
+
+          <button
+            onClick={() => setListenMode("group")}
+            className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition-all shadow-sm ${
+              listenMode === "group"
+                ? "bg-[#1877F2] text-white shadow-md shadow-blue-500/25 active:scale-95 border border-[#1877F2]"
+                : "bg-white/80 text-[#65676B] hover:text-[#050505] hover:bg-white border border-[#1877F2]/15"
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span>Group Room</span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2 px-3 text-xs font-bold">
+          {listenMode === "solo" ? (
+            <span className="flex items-center gap-1.5 text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200 shadow-sm">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              Solo Music Mode Active 🎧
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5 text-[#1877F2] bg-[#1877F2]/10 px-3 py-1 rounded-full border border-[#1877F2]/20 shadow-sm">
+              <span className="w-2 h-2 rounded-full bg-[#1877F2] animate-pulse" />
+              Group Synced Room ({session.participants.length} online) 👥
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* MUSIC ROOM TOP HEADER (SLEEK, BALANCED & PERFECTLY ALIGNED) */}
+      <div className="relative overflow-hidden p-3 sm:px-4 flex flex-col md:flex-row items-center justify-between gap-3 rounded-2xl text-[#050505] shadow-md shadow-blue-500/5 bg-gradient-to-r from-white via-blue-50/70 to-indigo-50/50 border border-[#1877F2]/25 backdrop-blur-2xl">
         {/* Soft Ambient Mesh Glow Overlay */}
         <div className="absolute inset-0 bg-gradient-to-r from-[#1877F2]/10 via-purple-500/10 to-pink-500/5 pointer-events-none" />
 
-        <div className="flex items-center gap-2 text-[11px] text-[#65676B] font-semibold relative z-10">
+        {/* Left Side: Host & Room Code Info */}
+        <div className="flex items-center gap-2 text-xs text-[#65676B] font-semibold relative z-10 whitespace-nowrap">
           <span>Host: <strong className="text-[#050505] font-extrabold">{session.host.name}</strong></span>
           <span className="text-[#1877F2]/40 font-bold">•</span>
-          <span>Code: <strong className="text-[#1877F2] font-extrabold font-mono bg-[#1877F2]/10 px-1.5 py-0.5 text-[10px] rounded-md border border-[#1877F2]/20">{session.roomCode || "VIBE-8842"}</strong></span>
+          <span>Code: <strong className="text-[#1877F2] font-extrabold font-mono bg-[#1877F2]/10 px-2 py-0.5 text-xs rounded-md border border-[#1877F2]/20">{session.roomCode || "VIBE-8842"}</strong></span>
         </div>
 
-        {/* Live Audience Counters & Playlist Button */}
-        <div className="flex items-center gap-2.5 relative z-10">
+        {/* Right Side: Action Buttons & Audience Counters */}
+        <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2 sm:gap-2.5 relative z-10">
+          {listenMode === "group" && (
+            <button
+              onClick={() => setIsInviteModalOpen(true)}
+              className="px-3.5 py-1.5 rounded-full bg-[#1877F2] hover:bg-blue-600 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-md shadow-blue-500/25 active:scale-95 transition-all whitespace-nowrap shrink-0"
+              title="Invite Friends to Group Room"
+            >
+              <UserPlus className="w-3.5 h-3.5 text-white stroke-[2.5]" />
+              <span className="whitespace-nowrap">+ Add Friends</span>
+            </button>
+          )}
+
           <button
             onClick={() => setIsQueueModalOpen(true)}
-            className="px-3 py-1 rounded-full bg-[#1877F2]/10 hover:bg-[#1877F2]/20 border border-[#1877F2]/30 text-[#1877F2] font-extrabold text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition-all"
+            className="px-3.5 py-1.5 rounded-full bg-[#1877F2]/10 hover:bg-[#1877F2]/20 border border-[#1877F2]/30 text-[#1877F2] font-extrabold text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition-all whitespace-nowrap shrink-0"
             title="Open Room Playlist"
           >
-            <ListMusic className="w-3.5 h-3.5 text-[#1877F2]" />
-            <span>Playlist ({session.queue.length})</span>
+            <ListMusic className="w-3.5 h-3.5 text-[#1877F2] stroke-[2.2]" />
+            <span className="whitespace-nowrap">Playlist ({session.queue.length})</span>
           </button>
 
-          <div className="flex -space-x-1.5 overflow-hidden p-0.5">
-            {session.participants.map((user) => (
-              <img
-                key={user.id}
-                src={user.avatar}
-                alt={user.name}
-                className="w-6 h-6 rounded-full border-2 border-white object-cover shadow-sm hover:scale-110 transition-transform"
-                title={user.name}
-              />
-            ))}
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="flex -space-x-1.5 overflow-hidden p-0.5 shrink-0 items-center">
+              {session.participants.map((user) => (
+                <img
+                  key={user.id}
+                  src={user.avatar}
+                  alt={user.name}
+                  className="w-6 h-6 sm:w-6.5 sm:h-6.5 rounded-full border-2 border-white object-cover shadow-sm hover:scale-110 transition-transform shrink-0 cursor-pointer"
+                  onClick={() => setIsInviteModalOpen(true)}
+                  title={`${user.name} (Click to manage room members)`}
+                />
+              ))}
+
+              {listenMode === "group" && (
+                <button
+                  onClick={() => setIsInviteModalOpen(true)}
+                  className="w-6 h-6 sm:w-6.5 sm:h-6.5 rounded-full bg-[#1877F2] hover:bg-blue-600 border-2 border-white text-white flex items-center justify-center shadow-md shadow-blue-500/30 hover:scale-110 active:scale-95 transition-transform shrink-0 relative z-10"
+                  title="Add / Remove Friends"
+                >
+                  <Plus className="w-3.5 h-3.5 text-white stroke-[3]" />
+                </button>
+              )}
+            </div>
+
+            <button
+              onClick={() => setIsInviteModalOpen(true)}
+              className="text-[11px] font-extrabold bg-white/90 hover:bg-blue-50 px-2.5 py-1 rounded-full border border-[#1877F2]/25 text-[#1877F2] shadow-sm flex items-center gap-1.5 whitespace-nowrap shrink-0 active:scale-95 transition-all"
+              title="Manage Room Members & Invite Friends"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span>{session.participants.length} Listening</span>
+            </button>
           </div>
-          <span className="text-[10px] font-extrabold bg-white/90 px-2.5 py-1 rounded-full border border-[#1877F2]/25 text-[#1877F2] shadow-sm flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span>{session.participants.length} Listening</span>
-          </span>
         </div>
       </div>
 
       {/* ONLINE MUSIC STAGE MAIN GRID */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* LEFT COLUMN: ONLINE PLAYER STAGE (LIGHT THEME AMBIENT CARD) */}
-        <div className="lg:col-span-7 relative overflow-hidden p-6 sm:p-8 border border-[#1877F2]/25 flex flex-col justify-between space-y-6 shadow-xl shadow-blue-500/5 rounded-3xl bg-gradient-to-br from-white via-blue-50/70 to-indigo-50/50 text-[#050505] backdrop-blur-2xl">
+        <div className={`${listenMode === "solo" ? "lg:col-span-12" : "lg:col-span-7"} relative overflow-hidden p-6 sm:p-8 border border-[#1877F2]/25 flex flex-col justify-between space-y-6 shadow-xl shadow-blue-500/5 rounded-3xl bg-gradient-to-br from-white via-blue-50/70 to-indigo-50/50 text-[#050505] backdrop-blur-2xl transition-all`}>
           {/* Soft Ambient Mesh Glow Overlay */}
           <div className="absolute inset-0 bg-gradient-to-r from-[#1877F2]/10 via-purple-500/10 to-pink-500/5 pointer-events-none" />
 
@@ -403,16 +585,13 @@ export const ListenTogetherRoom: React.FC<ListenTogetherRoomProps> = ({ onClose 
               </div>
             </div>
 
-            {/* Single Horizontal Controls Row with High-Clarity Vector Badge Buttons (Matching Image 2) */}
+            {/* Single Horizontal Controls Row with Playback Controls & Playlist Button */}
             <div className="flex items-center justify-between gap-2 sm:gap-4 pt-1 px-1">
-              {/* 1. Playlist Button (Left - Circular Blue Button with Badge at Top Right) */}
+              {/* 1. Playlist Button (Left) */}
               <button
-                onClick={() => {
-                  setModalTab("playlist");
-                  setIsQueueModalOpen(true);
-                }}
+                onClick={() => setIsQueueModalOpen(true)}
                 className="w-10 h-10 rounded-full bg-[#1877F2] hover:bg-blue-600 text-white flex items-center justify-center relative shadow-md shadow-blue-500/25 active:scale-95 transition-all shrink-0 group"
-                title={`Open Playlist (${activePlaylist.tracks.length} songs)`}
+                title={`Open Room Playlist (${activePlaylist.tracks.length} songs)`}
               >
                 <ListMusic className="w-5 h-5 text-white stroke-[2.2]" />
                 <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-purple-600 text-white font-extrabold text-[9px] flex items-center justify-center border-2 border-white shadow-md">
@@ -424,7 +603,7 @@ export const ListenTogetherRoom: React.FC<ListenTogetherRoomProps> = ({ onClose 
               <div className="flex items-center justify-center gap-2.5 sm:gap-3">
                 {/* Previous Track Button */}
                 <button
-                  onClick={prevTrack}
+                  onClick={handlePlayPrevPlaylistTrack}
                   className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#F0F2F5] text-[#050505] hover:bg-[#E4E6EB] active:scale-95 transition-all shadow-sm border border-[#E4E6EB] flex items-center justify-center"
                   title="Previous Track"
                 >
@@ -446,7 +625,7 @@ export const ListenTogetherRoom: React.FC<ListenTogetherRoomProps> = ({ onClose 
 
                 {/* Next Track Button */}
                 <button
-                  onClick={nextTrack}
+                  onClick={handlePlayNextPlaylistTrack}
                   className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#F0F2F5] text-[#050505] hover:bg-[#E4E6EB] active:scale-95 transition-all shadow-sm border border-[#E4E6EB] flex items-center justify-center"
                   title="Next Track"
                 >
@@ -454,93 +633,90 @@ export const ListenTogetherRoom: React.FC<ListenTogetherRoomProps> = ({ onClose 
                 </button>
               </div>
 
-              {/* 3. Queue Button (Right - Circular Blue Button with Badge at Top Right) */}
-              <button
-                onClick={() => {
-                  setModalTab("queue");
-                  setIsQueueModalOpen(true);
-                }}
-                className="w-10 h-10 rounded-full bg-[#1877F2] hover:bg-blue-600 text-white flex items-center justify-center relative shadow-md shadow-blue-500/25 active:scale-95 transition-all shrink-0 group"
-                title={`Open Queue (${session.queue.length} songs)`}
-              >
-                <ListOrdered className="w-5 h-5 text-white stroke-[2.2]" />
-                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-purple-600 text-white font-extrabold text-[9px] flex items-center justify-center border-2 border-white shadow-md">
-                  {session.queue.length}
+              {/* 3. Symmetric Spacer */}
+              <div className="w-10 h-10 shrink-0" />
+            </div>
+          </div>
+        </div>
+
+        {/* RIGHT COLUMN: DEDICATED ROOM LIVE CHAT (LIGHT THEME AMBIENT CARD - GROUP MODE ONLY) */}
+        {listenMode === "group" && (
+          <div className="lg:col-span-5 flex flex-col h-[600px]">
+            <div className="relative overflow-hidden border border-[#1877F2]/25 rounded-3xl p-5 flex flex-col h-full space-y-4 bg-gradient-to-br from-white via-blue-50/70 to-indigo-50/50 text-[#050505] shadow-xl shadow-blue-500/5 backdrop-blur-2xl">
+              {/* Soft Ambient Mesh Glow Overlay */}
+              <div className="absolute inset-0 bg-gradient-to-r from-[#1877F2]/10 via-purple-500/10 to-pink-500/5 pointer-events-none" />
+
+              <div className="flex items-center justify-between border-b border-[#1877F2]/15 pb-3 relative z-10">
+                <h3 className="font-extrabold text-sm text-[#050505] flex items-center gap-2">
+                  <Music className="w-4 h-4 text-[#1877F2]" />
+                  <span>Room Live Chat</span>
+                </h3>
+                <span className="text-[11px] font-extrabold text-[#1877F2] bg-white/90 px-2.5 py-1 rounded-full border border-[#1877F2]/20 shadow-sm">
+                  {session.liveChat?.length || 0} messages
                 </span>
-              </button>
-            </div>
-          </div>
-        </div>
+              </div>
 
-        {/* RIGHT COLUMN: DEDICATED ROOM LIVE CHAT (LIGHT THEME AMBIENT CARD) */}
-        <div className="lg:col-span-5 flex flex-col h-[600px]">
-          <div className="relative overflow-hidden border border-[#1877F2]/25 rounded-3xl p-5 flex flex-col h-full space-y-4 bg-gradient-to-br from-white via-blue-50/70 to-indigo-50/50 text-[#050505] shadow-xl shadow-blue-500/5 backdrop-blur-2xl">
-            {/* Soft Ambient Mesh Glow Overlay */}
-            <div className="absolute inset-0 bg-gradient-to-r from-[#1877F2]/10 via-purple-500/10 to-pink-500/5 pointer-events-none" />
-
-            <div className="flex items-center justify-between border-b border-[#1877F2]/15 pb-3 relative z-10">
-              <h3 className="font-extrabold text-sm text-[#050505] flex items-center gap-2">
-                <Music className="w-4 h-4 text-[#1877F2]" />
-                <span>Room Live Chat</span>
-              </h3>
-              <span className="text-[11px] font-extrabold text-[#1877F2] bg-white/90 px-2.5 py-1 rounded-full border border-[#1877F2]/20 shadow-sm">
-                {session.liveChat?.length || 0} messages
-              </span>
-            </div>
-
-            <div className="flex-1 overflow-y-auto space-y-3 pr-1 no-scrollbar relative z-10">
-              {(session.liveChat || []).map((msg) => (
-                <div key={msg.id} className="p-3.5 rounded-2xl bg-white/80 border border-[#1877F2]/15 shadow-sm space-y-1 hover:border-[#1877F2]/30 transition-all">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-extrabold text-[#1877F2]">{msg.author.name}</span>
-                    <span className="text-[10px] font-semibold text-[#65676B]">{msg.time}</span>
+              <div ref={chatContainerRef} className="flex-1 overflow-y-auto space-y-3 pr-1 no-scrollbar relative z-10">
+                {(session.liveChat || []).map((msg) => (
+                  <div key={msg.id} className="p-3.5 rounded-2xl bg-white/80 border border-[#1877F2]/15 shadow-sm space-y-1 hover:border-[#1877F2]/30 transition-all">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-extrabold text-[#1877F2]">{msg.author.name}</span>
+                      <span className="text-[10px] font-semibold text-[#65676B]">{msg.time}</span>
+                    </div>
+                    <p className="text-xs font-medium text-[#050505]">{msg.text}</p>
                   </div>
-                  <p className="text-xs font-medium text-[#050505]">{msg.text}</p>
-                </div>
-              ))}
-            </div>
+                ))}
+                <div ref={chatEndRef} />
+              </div>
 
-            {/* Desktop Only Chat Input Form */}
-            <form
-              onSubmit={handleSendChat}
-              className="hidden lg:flex gap-2.5 p-2.5 border-t border-[#1877F2]/20 bg-white/95 backdrop-blur-xl rounded-2xl shadow-sm shrink-0 mt-auto"
-            >
-              <input
-                type="text"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Chat with room..."
-                className="flex-1 bg-white border border-[#1877F2]/30 rounded-xl px-4 py-2.5 text-xs text-[#050505] placeholder-[#65676B] focus:outline-none focus:border-[#1877F2] focus:ring-2 focus:ring-[#1877F2]/20 transition-all font-medium shadow-sm"
-              />
-              <button
-                type="submit"
-                className="px-6 py-2.5 bg-[#1877F2] hover:bg-blue-600 rounded-xl text-xs font-extrabold text-white transition-all shadow-md shadow-blue-500/25 active:scale-95 shrink-0"
+              {/* Desktop Only Chat Input Form */}
+              <form
+                onSubmit={handleSendChat}
+                className="hidden lg:flex gap-2.5 p-2.5 border-t border-[#1877F2]/20 bg-white/95 backdrop-blur-xl rounded-2xl shadow-sm shrink-0 mt-auto"
               >
-                Send
-              </button>
-            </form>
+                <input
+                  type="text"
+                  value={chatInput}
+                  onFocus={scrollToChatBottom}
+                  onClick={scrollToChatBottom}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="Chat with room..."
+                  className="flex-1 bg-white border border-[#1877F2]/30 rounded-xl px-4 py-2.5 text-xs text-[#050505] placeholder-[#65676B] focus:outline-none focus:border-[#1877F2] focus:ring-2 focus:ring-[#1877F2]/20 transition-all font-medium shadow-sm"
+                />
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 bg-[#1877F2] hover:bg-blue-600 rounded-xl text-xs font-extrabold text-white transition-all shadow-md shadow-blue-500/25 active:scale-95 shrink-0"
+                >
+                  Send
+                </button>
+              </form>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Mobile/Tablet Fixed Chat Form (100% Fixed directly above Mobile Nav Bar h-16) */}
-      <div className="lg:hidden fixed bottom-16 left-0 right-0 z-50 p-2.5 px-3 bg-white/95 backdrop-blur-2xl border-t border-[#1877F2]/30 shadow-2xl">
-        <form onSubmit={handleSendChat} className="flex gap-2.5 max-w-xl mx-auto">
-          <input
-            type="text"
-            value={chatInput}
-            onChange={(e) => setChatInput(e.target.value)}
-            placeholder="Chat with room..."
-            className="flex-1 bg-white border border-[#1877F2]/30 rounded-xl px-4 py-2.5 text-xs text-[#050505] placeholder-[#65676B] focus:outline-none focus:border-[#1877F2] focus:ring-2 focus:ring-[#1877F2]/20 transition-all font-medium shadow-sm"
-          />
-          <button
-            type="submit"
-            className="px-6 py-2.5 bg-[#1877F2] hover:bg-blue-600 rounded-xl text-xs font-extrabold text-white transition-all shadow-md shadow-blue-500/25 active:scale-95 shrink-0"
-          >
-            Send
-          </button>
-        </form>
-      </div>
+      {/* Mobile/Tablet Fixed Chat Form (GROUP MODE ONLY) */}
+      {listenMode === "group" && (
+        <div className="lg:hidden fixed bottom-16 left-0 right-0 z-50 p-2.5 px-3 bg-white/95 backdrop-blur-2xl border-t border-[#1877F2]/30 shadow-2xl">
+          <form onSubmit={handleSendChat} className="flex gap-2.5 max-w-xl mx-auto">
+            <input
+              type="text"
+              value={chatInput}
+              onFocus={scrollToChatBottom}
+              onClick={scrollToChatBottom}
+              onChange={(e) => setChatInput(e.target.value)}
+              placeholder="Chat with room..."
+              className="flex-1 bg-white border border-[#1877F2]/30 rounded-xl px-4 py-2.5 text-xs text-[#050505] placeholder-[#65676B] focus:outline-none focus:border-[#1877F2] focus:ring-2 focus:ring-[#1877F2]/20 transition-all font-medium shadow-sm"
+            />
+            <button
+              type="submit"
+              className="px-6 py-2.5 bg-[#1877F2] hover:bg-blue-600 rounded-xl text-xs font-extrabold text-white transition-all shadow-md shadow-blue-500/25 active:scale-95 shrink-0"
+            >
+              Send
+            </button>
+          </form>
+        </div>
+      )}
 
       {/* POP-UP QUEUE MODAL WITH LIVE YOUTUBE MUSIC SEARCH (STUNNING LIGHT THEME AMBIENT CARD) */}
       {isQueueModalOpen && (
@@ -548,31 +724,16 @@ export const ListenTogetherRoom: React.FC<ListenTogetherRoomProps> = ({ onClose 
           <div className="relative overflow-hidden bg-gradient-to-br from-white via-blue-50/80 to-indigo-50/60 border border-[#1877F2]/30 w-full max-w-lg rounded-3xl p-6 text-[#050505] shadow-2xl shadow-blue-500/10 space-y-5 max-h-[85vh] flex flex-col backdrop-blur-2xl">
             {/* Soft Ambient Mesh Glow Overlay */}
             <div className="absolute inset-0 bg-gradient-to-r from-[#1877F2]/10 via-purple-500/10 to-pink-500/5 pointer-events-none" />
-            {/* Modal Header Tabs */}
-            <div className="flex items-center justify-between border-b border-[#E4E6EB] pb-3">
-              <div className="flex items-center gap-2 p-1 bg-[#F0F2F5] rounded-2xl border border-[#E4E6EB] flex-1 mr-3">
-                <button
-                  onClick={() => setModalTab("playlist")}
-                  className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all ${
-                    modalTab === "playlist"
-                      ? "bg-white text-[#1877F2] shadow-sm border border-[#1877F2]/20"
-                      : "text-[#65676B] hover:text-[#050505]"
-                  }`}
-                >
-                  <ListMusic className="w-3.5 h-3.5" />
-                  <span>Playlist ({activePlaylist.tracks.length})</span>
-                </button>
-
-                <button
-                  onClick={() => setModalTab("queue")}
-                  className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all ${
-                    modalTab === "queue"
-                      ? "bg-white text-[#1877F2] shadow-sm border border-[#1877F2]/20"
-                      : "text-[#65676B] hover:text-[#050505]"
-                  }`}
-                >
-                  <span>Queue ({session.queue.length})</span>
-                </button>
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-[#E4E6EB] pb-3 relative z-10">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-[#1877F2]/10 border border-[#1877F2]/30 flex items-center justify-center">
+                  <ListMusic className="w-4 h-4 text-[#1877F2]" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm text-[#050505]">Room Playlists & Music</h3>
+                  <p className="text-[10px] text-[#65676B] font-semibold">{activePlaylist.name} ({activePlaylist.tracks.length} songs)</p>
+                </div>
               </div>
 
               <button
@@ -585,14 +746,14 @@ export const ListenTogetherRoom: React.FC<ListenTogetherRoomProps> = ({ onClose 
 
             {/* Notification Toast */}
             {addedToast && (
-              <div className="px-4 py-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold flex items-center gap-2 animate-in slide-in-from-top-2">
+              <div className="px-4 py-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold flex items-center gap-2 animate-in slide-in-from-top-2 relative z-10">
                 <Check className="w-4 h-4 text-emerald-600" />
                 <span>{addedToast}</span>
               </div>
             )}
 
             {/* LIVE YOUTUBE MUSIC SEARCH SECTION */}
-            <div ref={searchSectionRef} className="space-y-2.5">
+            <div ref={searchSectionRef} className="space-y-2.5 relative z-10">
               <label className="text-xs font-extrabold text-[#1877F2] uppercase tracking-wider flex items-center gap-1.5">
                 <Plus className="w-3.5 h-3.5" />
                 <span>YouTube Music Search</span>
@@ -622,7 +783,7 @@ export const ListenTogetherRoom: React.FC<ListenTogetherRoomProps> = ({ onClose 
                 ) : null}
               </div>
 
-              {/* Addable YouTube Music Songs List (Only expands when search bar is clicked/focused) */}
+              {/* Addable YouTube Music Songs List */}
               {isSearchFocused && (
                 <div className="max-h-56 overflow-y-auto space-y-2 pr-1 no-scrollbar pt-1 animate-in fade-in slide-in-from-top-1 duration-150 border-t border-[#E4E6EB]/60">
                   {searchResults.map((track) => (
@@ -647,289 +808,346 @@ export const ListenTogetherRoom: React.FC<ListenTogetherRoomProps> = ({ onClose 
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleAddTrackToPlaylist(track, activePlaylist.id);
-                            setIsSearchFocused(false);
-                          }}
-                          className="px-2.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-extrabold flex items-center gap-1 shadow-md shadow-purple-500/20 active:scale-95 transition-all"
-                          title={`Add to ${activePlaylist.name}`}
-                        >
-                          <Plus className="w-3 h-3" />
-                          <span>+ Playlist</span>
-                        </button>
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleAddTrack(track);
-                            setIsSearchFocused(false);
-                          }}
-                          className="px-2.5 py-1.5 rounded-xl bg-[#1877F2] hover:bg-blue-600 text-white text-[11px] font-extrabold flex items-center gap-1 shadow-md shadow-blue-500/20 active:scale-95 transition-all"
-                          title="Add to Live Room Queue"
-                        >
-                          <Plus className="w-3 h-3" />
-                          <span>+ Queue</span>
-                        </button>
-                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAddTrackToPlaylist(track, activePlaylist.id);
+                          setIsSearchFocused(false);
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-[#1877F2] hover:bg-blue-600 text-white text-[11px] font-extrabold flex items-center gap-1 shadow-md shadow-blue-500/20 active:scale-95 transition-all shrink-0"
+                        title={`Add to ${activePlaylist.name}`}
+                      >
+                        <Plus className="w-3.5 h-3.5 text-white" />
+                        <span>+ Add to Playlist</span>
+                      </button>
                     </div>
                   ))}
                 </div>
               )}
             </div>
 
-            {/* TAB CONTENT: PLAYLIST VS QUEUE */}
-            {modalTab === "playlist" ? (
-              <div className="flex-1 overflow-y-auto space-y-3 pr-1 pt-2 no-scrollbar">
-                {/* Playlist Switcher Bar & Create Playlist Button */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-extrabold text-[#1877F2] uppercase tracking-wider flex items-center gap-1.5">
-                      <ListMusic className="w-3.5 h-3.5" />
-                      <span>Your Playlists ({playlists.length})</span>
-                    </label>
-
-                    <button
-                      onClick={() => setIsCreatingPlaylist(!isCreatingPlaylist)}
-                      className="px-2.5 py-1 rounded-xl bg-[#1877F2]/10 hover:bg-[#1877F2]/20 border border-[#1877F2]/30 text-[#1877F2] text-xs font-bold flex items-center gap-1 active:scale-95 transition-all"
-                    >
-                      <FolderPlus className="w-3.5 h-3.5" />
-                      <span>+ New Playlist</span>
-                    </button>
-                  </div>
-
-                  {/* Inline Create Playlist Form */}
-                  {isCreatingPlaylist && (
-                    <form
-                      onSubmit={handleCreateNewPlaylist}
-                      className="p-3 rounded-2xl bg-white border border-[#1877F2]/30 shadow-md space-y-2 animate-in fade-in duration-150"
-                    >
-                      <p className="text-xs font-bold text-[#050505]">Create Custom Playlist</p>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={newPlaylistName}
-                          onChange={(e) => setNewPlaylistName(e.target.value)}
-                          placeholder="Playlist name (e.g. My Tamil Favorites)..."
-                          autoFocus
-                          className="flex-1 px-3 py-1.5 rounded-xl bg-[#F0F2F5] border border-[#E4E6EB] text-xs text-[#050505] placeholder-[#65676B] focus:outline-none focus:border-[#1877F2] font-medium"
-                        />
-                        <button
-                          type="submit"
-                          className="px-3.5 py-1.5 rounded-xl bg-[#1877F2] hover:bg-blue-600 text-white font-extrabold text-xs shadow-sm active:scale-95 transition-all"
-                        >
-                          Create
-                        </button>
-                      </div>
-                    </form>
-                  )}
-
-                  {/* Playlists Horizontal Scroll Pills */}
-                  <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-                    {playlists.map((pl) => (
-                      <button
-                        key={pl.id}
-                        onClick={() => handleSelectActivePlaylist(pl.id)}
-                        className={`px-3 py-1.5 rounded-full text-xs font-extrabold whitespace-nowrap flex items-center gap-1.5 border transition-all ${
-                          activePlaylist.id === pl.id
-                            ? "bg-[#1877F2] text-white border-[#1877F2] shadow-sm shadow-blue-500/20"
-                            : "bg-white text-[#65676B] border-[#E4E6EB] hover:text-[#050505] hover:border-[#1877F2]/40"
-                        }`}
-                      >
-                        <span>{pl.name}</span>
-                        <span
-                          className={`w-4 h-4 rounded-full text-[9px] font-extrabold flex items-center justify-center border ${
-                            activePlaylist.id === pl.id
-                              ? "bg-purple-600 text-white border-white/40"
-                              : "bg-[#F0F2F5] text-[#65676B] border-[#E4E6EB]"
-                          }`}
-                        >
-                          {pl.tracks.length}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Active Playlist Header */}
-                <div className="flex items-center justify-between pt-2 border-t border-[#E4E6EB]">
-                  <div>
-                    <h4 className="text-xs font-extrabold text-[#050505] flex items-center gap-2">
-                      <span>{activePlaylist.name}</span>
-                      <span className="text-[10px] text-[#65676B] font-semibold">({activePlaylist.tracks.length} tracks)</span>
-                    </h4>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {activePlaylist.tracks.length > 0 && (
-                      <button
-                        onClick={() => handleAddEntirePlaylistToQueue(activePlaylist)}
-                        className="text-[11px] bg-[#1877F2] hover:bg-blue-600 text-white font-extrabold px-2.5 py-1 rounded-xl flex items-center gap-1 shadow-sm active:scale-95 transition-all"
-                        title="Add all songs in this playlist to live room queue"
-                      >
-                        <Plus className="w-3 h-3 text-white" />
-                        <span>Add All to Queue</span>
-                      </button>
-                    )}
-
-                    {!activePlaylist.isDefault && (
-                      <button
-                        onClick={() => handleDeletePlaylist(activePlaylist.id)}
-                        className="text-xs text-rose-500 hover:text-rose-600 font-bold flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-rose-50 transition-colors"
-                        title="Delete this Playlist"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        <span>Delete</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Tracks List of Active Playlist */}
-                <div className="space-y-2 pt-1">
-                  {activePlaylist.tracks.length === 0 ? (
-                    <div className="text-center py-6 text-[#65676B] text-xs font-medium bg-white/60 rounded-2xl border border-dashed border-[#E4E6EB]">
-                      Playlist is empty. Search YouTube Music above and tap "+ Playlist" to add songs!
-                    </div>
-                  ) : (
-                    activePlaylist.tracks.map((song) => (
-                      <div
-                        key={song.id}
-                        onClick={() => {
-                          playTrack(song);
-                          setIsQueueModalOpen(false);
-                        }}
-                        className={`p-2.5 rounded-2xl border flex items-center justify-between gap-3 cursor-pointer transition-all ${
-                          currentTrack?.id === song.id
-                            ? "bg-[#1877F2]/10 border-[#1877F2]"
-                            : "bg-[#F0F2F5]/80 border-[#E4E6EB] hover:border-[#1877F2] hover:bg-white"
-                        }`}
-                      >
-                        <div className="flex items-center gap-3 min-w-0 flex-1">
-                          <img
-                            src={song.coverArt}
-                            alt={song.title}
-                            className="w-10 h-10 rounded-xl object-cover shrink-0 border border-[#E4E6EB]"
-                          />
-                          <div className="min-w-0 flex-1">
-                            <p className="text-xs font-bold text-[#050505] truncate">{song.title}</p>
-                            <p className="text-[10px] text-[#65676B] truncate">{song.artist}</p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              playTrack(song);
-                              setIsQueueModalOpen(false);
-                            }}
-                            className="p-1.5 rounded-xl bg-[#1877F2] hover:bg-blue-600 text-white text-xs font-bold shadow-md shadow-blue-500/20 active:scale-95 transition-all"
-                            title="Play Now"
-                          >
-                            <Play className="w-3.5 h-3.5 fill-white text-white" />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleAddTrack(song);
-                            }}
-                            className="p-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-md shadow-purple-500/20 active:scale-95 transition-all"
-                            title="Add to Live Queue"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                          </button>
-                          {!activePlaylist.isDefault && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleRemoveTrackFromPlaylist(song.id, activePlaylist.id);
-                              }}
-                              className="p-1.5 rounded-xl text-rose-500 hover:bg-rose-50 transition-colors"
-                              title="Remove from Playlist"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="flex-1 overflow-y-auto space-y-3 pr-1 pt-2">
-                {/* User's Created Playlists at Top of Queue Tab */}
-                <div className="space-y-2 pb-3 border-b border-[#E4E6EB]">
+            {/* DEDICATED PLAYLIST MANAGER CONTENT */}
+            <div className="flex-1 overflow-y-auto space-y-3 pr-1 pt-2 no-scrollbar relative z-10">
+              {/* Playlist Switcher Bar & Create Playlist Button */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
                   <label className="text-xs font-extrabold text-[#1877F2] uppercase tracking-wider flex items-center gap-1.5">
-                    <ListMusic className="w-3.5 h-3.5 text-[#1877F2]" />
-                    <span>Add Playlist to Queue</span>
+                    <ListMusic className="w-3.5 h-3.5" />
+                    <span>Your Playlists ({playlists.length})</span>
                   </label>
 
-                  {playlists.length === 0 ? (
-                    <p className="text-[11px] text-[#65676B] font-medium">No playlists found. Create one in Playlist tab!</p>
-                  ) : (
-                    <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-                      {playlists.map((pl) => (
-                        <button
-                          key={pl.id}
-                          onClick={() => handleAddEntirePlaylistToQueue(pl)}
-                          className="px-3 py-1.5 rounded-full text-xs font-extrabold whitespace-nowrap flex items-center gap-1.5 bg-[#1877F2]/10 hover:bg-[#1877F2] hover:text-white border border-[#1877F2]/30 text-[#1877F2] shadow-sm active:scale-95 transition-all group"
-                          title={`Click to add all ${pl.tracks.length} songs from "${pl.name}" to live room queue`}
-                        >
-                          <Plus className="w-3.5 h-3.5 text-[#1877F2] group-hover:text-white" />
-                          <span>{pl.name}</span>
-                          <span className="w-4 h-4 rounded-full bg-purple-600 text-white font-extrabold text-[9px] flex items-center justify-center border border-white/40">
-                            {pl.tracks.length}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                  <button
+                    onClick={() => setIsCreatingPlaylist(!isCreatingPlaylist)}
+                    className="px-2.5 py-1 rounded-xl bg-[#1877F2]/10 hover:bg-[#1877F2]/20 border border-[#1877F2]/30 text-[#1877F2] text-xs font-bold flex items-center gap-1 active:scale-95 transition-all"
+                  >
+                    <FolderPlus className="w-3.5 h-3.5" />
+                    <span>+ New Playlist</span>
+                  </button>
                 </div>
 
-                <label className="text-xs font-extrabold text-[#65676B] uppercase tracking-wider block">
-                  Current Room Queue ({session.queue.length})
-                </label>
+                {/* Inline Create Playlist Form */}
+                {isCreatingPlaylist && (
+                  <form
+                    onSubmit={handleCreateNewPlaylist}
+                    className="p-3 rounded-2xl bg-white border border-[#1877F2]/30 shadow-md space-y-2 animate-in fade-in duration-150"
+                  >
+                    <p className="text-xs font-bold text-[#050505]">Create Custom Playlist</p>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newPlaylistName}
+                        onChange={(e) => setNewPlaylistName(e.target.value)}
+                        placeholder="Playlist name (e.g. My Tamil Favorites)..."
+                        autoFocus
+                        className="flex-1 px-3 py-1.5 rounded-xl bg-[#F0F2F5] border border-[#E4E6EB] text-xs text-[#050505] placeholder-[#65676B] focus:outline-none focus:border-[#1877F2] font-medium"
+                      />
+                      <button
+                        type="submit"
+                        className="px-3.5 py-1.5 rounded-xl bg-[#1877F2] hover:bg-blue-600 text-white font-extrabold text-xs shadow-sm active:scale-95 transition-all"
+                      >
+                        Create
+                      </button>
+                    </div>
+                  </form>
+                )}
 
-                {session.queue.length === 0 ? (
-                  <div className="text-center py-6 text-[#65676B] text-xs font-medium">
-                    Queue is empty. Click a playlist above or search YouTube Music to queue songs!
+                {/* Playlists Horizontal Scroll Pills */}
+                <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+                  {playlists.map((pl) => (
+                    <button
+                      key={pl.id}
+                      onClick={() => handleSelectActivePlaylist(pl.id)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-extrabold whitespace-nowrap flex items-center gap-1.5 border transition-all ${
+                        activePlaylist.id === pl.id
+                          ? "bg-[#1877F2] text-white border-[#1877F2] shadow-sm shadow-blue-500/20"
+                          : "bg-white text-[#65676B] border-[#E4E6EB] hover:text-[#050505] hover:border-[#1877F2]/40"
+                      }`}
+                    >
+                      <span>{pl.name}</span>
+                      <span
+                        className={`w-4 h-4 rounded-full text-[9px] font-extrabold flex items-center justify-center border ${
+                          activePlaylist.id === pl.id
+                            ? "bg-purple-600 text-white border-white/40"
+                            : "bg-[#F0F2F5] text-[#65676B] border-[#E4E6EB]"
+                        }`}
+                      >
+                        {pl.tracks.length}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Active Playlist Header */}
+              <div className="flex items-center justify-between pt-2 border-t border-[#E4E6EB]">
+                <div>
+                  <h4 className="text-xs font-extrabold text-[#050505] flex items-center gap-2">
+                    <span>{activePlaylist.name}</span>
+                    <span className="text-[10px] text-[#65676B] font-semibold">({activePlaylist.tracks.length} tracks)</span>
+                  </h4>
+                </div>
+
+                {!activePlaylist.isDefault && (
+                  <button
+                    onClick={() => handleDeletePlaylist(activePlaylist.id)}
+                    className="text-xs text-rose-500 hover:text-rose-600 font-bold flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-rose-50 transition-colors"
+                    title="Delete this Playlist"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Tracks List of Active Playlist */}
+              <div className="space-y-2 pt-1">
+                {activePlaylist.tracks.length === 0 ? (
+                  <div className="text-center py-6 text-[#65676B] text-xs font-medium bg-white/60 rounded-2xl border border-dashed border-[#E4E6EB]">
+                    Playlist is empty. Search YouTube Music above and tap "+ Add to Playlist" to add songs!
                   </div>
                 ) : (
-                  session.queue.map((item) => (
+                  activePlaylist.tracks.map((song) => (
                     <div
-                      key={item.id}
-                      className="p-3 rounded-2xl bg-[#F0F2F5]/80 border border-[#E4E6EB] flex items-center justify-between gap-3 hover:border-rose-500/40 transition-all"
+                      key={song.id}
+                      onClick={() => {
+                        playTrack(song);
+                        setIsQueueModalOpen(false);
+                      }}
+                      className={`p-2.5 rounded-2xl border flex items-center justify-between gap-3 cursor-pointer transition-all ${
+                        currentTrack?.id === song.id
+                          ? "bg-[#1877F2]/10 border-[#1877F2]"
+                          : "bg-[#F0F2F5]/80 border-[#E4E6EB] hover:border-[#1877F2] hover:bg-white"
+                      }`}
                     >
                       <div className="flex items-center gap-3 min-w-0 flex-1">
                         <img
-                          src={item.track.coverArt}
-                          alt={item.track.title}
+                          src={song.coverArt}
+                          alt={song.title}
                           className="w-10 h-10 rounded-xl object-cover shrink-0 border border-[#E4E6EB]"
                         />
                         <div className="min-w-0 flex-1">
-                          <p className="text-xs font-bold text-[#050505] truncate">{item.track.title}</p>
-                          <p className="text-[10px] text-[#65676B] truncate">
-                            {item.track.artist} • Added by <strong className="text-purple-600 font-semibold">{item.addedBy.name.split(" ")[0]}</strong>
-                          </p>
+                          <p className="text-xs font-bold text-[#050505] truncate">{song.title}</p>
+                          <p className="text-[10px] text-[#65676B] truncate">{song.artist}</p>
                         </div>
                       </div>
 
-                      <button
-                        onClick={() => removeFromQueue(item.id)}
-                        className="p-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-600 text-rose-600 hover:text-white border border-rose-500/20 transition-all shrink-0"
-                        title="Remove Song from Queue"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            playTrack(song);
+                            setIsQueueModalOpen(false);
+                          }}
+                          className="p-1.5 px-3 rounded-xl bg-[#1877F2] hover:bg-blue-600 text-white text-xs font-bold shadow-md shadow-blue-500/20 active:scale-95 transition-all flex items-center gap-1"
+                          title="Play Now"
+                        >
+                          <Play className="w-3.5 h-3.5 fill-white text-white" />
+                          <span>Play</span>
+                        </button>
+                        {!activePlaylist.isDefault && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveTrackFromPlaylist(song.id, activePlaylist.id);
+                            }}
+                            className="p-1.5 rounded-xl text-rose-500 hover:bg-rose-50 transition-colors"
+                            title="Remove from Playlist"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))
                 )}
               </div>
-            )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* POP-UP INVITE FRIENDS MODAL */}
+      {isInviteModalOpen && (
+        <div className="fixed inset-0 z-[200] bg-black/50 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="relative overflow-hidden bg-gradient-to-br from-white via-blue-50/80 to-indigo-50/60 border border-[#1877F2]/30 w-full max-w-md rounded-3xl p-6 text-[#050505] shadow-2xl shadow-blue-500/10 space-y-5 max-h-[85vh] flex flex-col backdrop-blur-2xl">
+            {/* Soft Ambient Mesh Glow Overlay */}
+            <div className="absolute inset-0 bg-gradient-to-r from-[#1877F2]/10 via-purple-500/10 to-pink-500/5 pointer-events-none" />
+
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-[#E4E6EB] pb-3 relative z-10">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-[#1877F2]/10 border border-[#1877F2]/30 flex items-center justify-center">
+                  <UserPlus className="w-4 h-4 text-[#1877F2]" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm text-[#050505]">Invite Friends to Room</h3>
+                  <p className="text-[10px] text-[#65676B] font-semibold">Share room code or invite online friends</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsInviteModalOpen(false)}
+                className="w-7 h-7 rounded-full bg-[#F0F2F5] hover:bg-[#E4E6EB] text-[#65676B] flex items-center justify-center transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* 1. ROOM CODE QUICK COPY BANNER */}
+            <div className="p-3 bg-white/90 rounded-2xl border border-[#1877F2]/25 shadow-sm space-y-2 relative z-10">
+              <span className="text-[10px] font-extrabold text-[#65676B] uppercase tracking-wider">Room Share Link & Code</span>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 px-3 py-2 bg-[#F0F2F5] rounded-xl border border-[#E4E6EB] flex-1">
+                  <span className="text-xs font-mono font-extrabold text-[#1877F2]">{session.roomCode || "VIBE-8842"}</span>
+                </div>
+                <button
+                  onClick={handleCopyRoomCode}
+                  className="px-3.5 py-2 rounded-xl bg-[#1877F2] hover:bg-blue-600 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-md shadow-blue-500/25 active:scale-95 transition-all shrink-0"
+                >
+                  {copiedCode ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-white" />
+                      <span>Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5 text-white" />
+                      <span>Copy Code</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* 2. SEARCH FRIENDS INPUT */}
+            <div className="relative z-10">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#65676B]" />
+              <input
+                type="text"
+                value={friendSearch}
+                onChange={(e) => setFriendSearch(e.target.value)}
+                placeholder="Search friends to add..."
+                className="w-full bg-white border border-[#1877F2]/30 rounded-xl pl-9 pr-4 py-2.5 text-xs text-[#050505] placeholder-[#65676B] focus:outline-none focus:border-[#1877F2] focus:ring-2 focus:ring-[#1877F2]/20 transition-all font-medium shadow-sm"
+              />
+            </div>
+
+            {/* 3. FRIENDS LIST & ROOM MEMBERS */}
+            <div className="flex-1 overflow-y-auto space-y-4 pr-1 no-scrollbar relative z-10 max-h-[340px]">
+              {/* Current Room Members with REMOVE / KICK Option */}
+              <div className="space-y-2">
+                <span className="text-[10px] font-extrabold text-[#1877F2] uppercase tracking-wider flex items-center justify-between">
+                  <span>Current Members ({session.participants.length})</span>
+                  <span className="text-[9px] text-[#65676B] lowercase font-medium">click remove to remove friend</span>
+                </span>
+                <div className="space-y-1.5">
+                  {session.participants.map((member) => {
+                    const isHost = member.id === session.host.id;
+                    const isMe = member.id === "usr-me";
+                    return (
+                      <div
+                        key={member.id}
+                        className="flex items-center justify-between p-2.5 rounded-2xl bg-white/90 border border-[#1877F2]/20 shadow-sm"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="relative">
+                            <img
+                              src={member.avatar}
+                              alt={member.name}
+                              className="w-8 h-8 rounded-full object-cover border border-[#1877F2]/20 shadow-sm"
+                            />
+                            <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-white" />
+                          </div>
+                          <div>
+                            <h4 className="text-xs font-extrabold text-[#050505] flex items-center gap-1.5">
+                              <span>{member.name}</span>
+                              {isHost && (
+                                <span className="text-[9px] font-extrabold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-md border border-amber-300">
+                                  👑 Host
+                                </span>
+                              )}
+                              {isMe && !isHost && (
+                                <span className="text-[9px] font-extrabold bg-blue-100 text-[#1877F2] px-1.5 py-0.5 rounded-md border border-blue-200">
+                                  You
+                                </span>
+                              )}
+                            </h4>
+                            <p className="text-[10px] font-semibold text-[#65676B]">@{member.username}</p>
+                          </div>
+                        </div>
+
+                        {!isHost && !isMe && (
+                          <button
+                            onClick={() => handleRemoveFriend(member)}
+                            className="px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white border border-rose-200 text-xs font-extrabold flex items-center gap-1 transition-all active:scale-95 shadow-sm"
+                            title={`Remove ${member.name} from room`}
+                          >
+                            <UserMinus className="w-3.5 h-3.5" />
+                            <span>Remove</span>
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Invite Online Friends List */}
+              <div className="space-y-2 pt-2 border-t border-[#E4E6EB]">
+                <span className="text-[10px] font-extrabold text-[#65676B] uppercase tracking-wider block">Invite Online Friends</span>
+                {MOCK_USERS.filter((u) => u.id !== "usr-me" && !session.participants.some((p) => p.id === u.id) && (
+                  !friendSearch.trim() ||
+                  u.name.toLowerCase().includes(friendSearch.toLowerCase()) ||
+                  u.username.toLowerCase().includes(friendSearch.toLowerCase())
+                )).map((friend) => (
+                  <div
+                    key={friend.id}
+                    className="flex items-center justify-between p-2.5 rounded-2xl bg-white/80 border border-[#1877F2]/15 hover:border-[#1877F2]/30 shadow-sm transition-all"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="relative">
+                        <img
+                          src={friend.avatar}
+                          alt={friend.name}
+                          className="w-8 h-8 rounded-full object-cover border border-[#1877F2]/20 shadow-sm"
+                        />
+                        <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-white" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-extrabold text-[#050505]">{friend.name}</h4>
+                        <p className="text-[10px] font-semibold text-[#65676B]">@{friend.username}</p>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => handleInviteFriend(friend)}
+                      className="px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1 transition-all bg-[#1877F2] hover:bg-blue-600 text-white shadow-md shadow-blue-500/20 active:scale-95"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Invite</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       )}

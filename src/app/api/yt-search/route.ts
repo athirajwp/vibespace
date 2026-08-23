@@ -1,5 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
 
+function parseDuration(str?: string): number {
+  if (!str) return 0;
+  const parts = str.split(":").map((p) => parseInt(p.trim(), 10));
+  if (parts.some(isNaN)) return 0;
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  return 0;
+}
+
+function extractYtDurationText(video: any): string {
+  if (video?.lengthText?.simpleText) return video.lengthText.simpleText;
+  if (video?.lengthText?.runs?.[0]?.text) return video.lengthText.runs[0].text;
+  if (Array.isArray(video?.thumbnailOverlays)) {
+    for (const overlay of video.thumbnailOverlays) {
+      const timeObj = overlay?.thumbnailOverlayTimeStatusRenderer?.text;
+      if (timeObj?.simpleText) return timeObj.simpleText;
+      if (timeObj?.runs?.[0]?.text) return timeObj.runs[0].text;
+    }
+  }
+  return "";
+}
+
+function extractYtDurationSeconds(video: any): number {
+  if (video?.lengthSeconds) {
+    const sec = parseInt(video.lengthSeconds, 10);
+    if (!isNaN(sec) && sec > 0) return sec;
+  }
+  const str = extractYtDurationText(video);
+  return parseDuration(str);
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const query = searchParams.get("q");
@@ -83,6 +114,8 @@ export async function GET(req: NextRequest) {
                 video.viewCountText?.simpleText ||
                 video.shortViewCountText?.simpleText ||
                 "Official Song";
+              const lengthText = extractYtDurationText(video);
+              const durationSec = extractYtDurationSeconds(video);
 
               tracks.push({
                 id: videoId,
@@ -90,6 +123,8 @@ export async function GET(req: NextRequest) {
                 type: "Song",
                 artist: channel,
                 stats: stats,
+                duration: durationSec > 0 ? durationSec : 215,
+                durationText: lengthText,
                 cover: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
                 coverArt: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
               });
@@ -107,14 +142,14 @@ export async function GET(req: NextRequest) {
     if (tracks.length === 0) {
       const fallbackDatabase: Record<string, any[]> = {
         kutty: [
-          { id: "GqlGdhjEXNg", title: "Kutti Story (From \"Master\")", type: "Song", artist: "Anirudh Ravichander, Thalapathy Vijay", stats: "115M plays", album: "Master", cover: "https://i.ytimg.com/vi/GqlGdhjEXNg/hqdefault.jpg", coverArt: "https://i.ytimg.com/vi/GqlGdhjEXNg/hqdefault.jpg" },
-          { id: "N2z0kXQ_474", title: "Kutty Pattas", type: "Song", artist: "Santhosh Dhayanidhi, Rakshita Suresh", stats: "280M plays", album: "Kutty Pattas", cover: "https://i.ytimg.com/vi/N2z0kXQ_474/hqdefault.jpg", coverArt: "https://i.ytimg.com/vi/N2z0kXQ_474/hqdefault.jpg" },
-          { id: "kJQP7kiw5Fk", title: "Kutty Kudiye (From \"Premalu\")", type: "Song", artist: "Vishnu Vijay, Suhail Koya", stats: "18M plays", album: "Premalu", cover: "https://i.ytimg.com/vi/kJQP7kiw5Fk/hqdefault.jpg", coverArt: "https://i.ytimg.com/vi/kJQP7kiw5Fk/hqdefault.jpg" },
-          { id: "yKNxeF4KMsY", title: "Yaaro En Nenjai", type: "Song", artist: "Devi Sri Prasad, Sagar", stats: "16M plays", album: "Kutty", cover: "https://i.ytimg.com/vi/yKNxeF4KMsY/hqdefault.jpg", coverArt: "https://i.ytimg.com/vi/yKNxeF4KMsY/hqdefault.jpg" },
+          { id: "GqlGdhjEXNg", title: "Kutti Story (From \"Master\")", type: "Song", artist: "Anirudh Ravichander, Thalapathy Vijay", stats: "115M plays", album: "Master", duration: 290, cover: "https://i.ytimg.com/vi/GqlGdhjEXNg/hqdefault.jpg", coverArt: "https://i.ytimg.com/vi/GqlGdhjEXNg/hqdefault.jpg" },
+          { id: "N2z0kXQ_474", title: "Kutty Pattas", type: "Song", artist: "Santhosh Dhayanidhi, Rakshita Suresh", stats: "280M plays", album: "Kutty Pattas", duration: 230, cover: "https://i.ytimg.com/vi/N2z0kXQ_474/hqdefault.jpg", coverArt: "https://i.ytimg.com/vi/N2z0kXQ_474/hqdefault.jpg" },
+          { id: "kJQP7kiw5Fk", title: "Kutty Kudiye (From \"Premalu\")", type: "Song", artist: "Vishnu Vijay, Suhail Koya", stats: "18M plays", album: "Premalu", duration: 195, cover: "https://i.ytimg.com/vi/kJQP7kiw5Fk/hqdefault.jpg", coverArt: "https://i.ytimg.com/vi/kJQP7kiw5Fk/hqdefault.jpg" },
+          { id: "yKNxeF4KMsY", title: "Yaaro En Nenjai", type: "Song", artist: "Devi Sri Prasad, Sagar", stats: "16M plays", album: "Kutty", duration: 285, cover: "https://i.ytimg.com/vi/yKNxeF4KMsY/hqdefault.jpg", coverArt: "https://i.ytimg.com/vi/yKNxeF4KMsY/hqdefault.jpg" },
         ],
         anul: [
-          { id: "1f_9g2tUjCg", title: "Anul Maale Panithuli", type: "Song", artist: "Harris Jayaraj • V.V. Prasanna", stats: "48M plays", album: "Vaaranam Aayiram", cover: "https://i.ytimg.com/vi/1f_9g2tUjCg/hqdefault.jpg", coverArt: "https://i.ytimg.com/vi/1f_9g2tUjCg/hqdefault.jpg" },
-          { id: "hMhWw1P1dBE", title: "Anul Maale Panithuli (Official Audio)", type: "Song", artist: "Sony Music South", stats: "12M plays", album: "Vaaranam Aayiram", cover: "https://i.ytimg.com/vi/hMhWw1P1dBE/hqdefault.jpg", coverArt: "https://i.ytimg.com/vi/hMhWw1P1dBE/hqdefault.jpg" },
+          { id: "1f_9g2tUjCg", title: "Anul Maale Panithuli", type: "Song", artist: "Harris Jayaraj • V.V. Prasanna", stats: "48M plays", album: "Vaaranam Aayiram", duration: 315, cover: "https://i.ytimg.com/vi/1f_9g2tUjCg/hqdefault.jpg", coverArt: "https://i.ytimg.com/vi/1f_9g2tUjCg/hqdefault.jpg" },
+          { id: "hMhWw1P1dBE", title: "Anul Maale Panithuli (Official Audio)", type: "Song", artist: "Sony Music South", stats: "12M plays", album: "Vaaranam Aayiram", duration: 315, cover: "https://i.ytimg.com/vi/hMhWw1P1dBE/hqdefault.jpg", coverArt: "https://i.ytimg.com/vi/hMhWw1P1dBE/hqdefault.jpg" },
         ]
       };
 

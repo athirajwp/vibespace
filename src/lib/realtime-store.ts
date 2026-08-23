@@ -67,8 +67,14 @@ class RealtimeSessionStore {
         this.handleTrackEnded();
       });
 
-      this.audioEl.addEventListener("error", () => {
-        // Silently catch audio element loading errors for non-direct MP3 streams
+      this.audioEl.addEventListener("loadedmetadata", () => {
+        if (this.audioEl && this.audioEl.duration && !isNaN(this.audioEl.duration) && isFinite(this.audioEl.duration)) {
+          if (this.session.playbackState.currentTrack) {
+            this.session.playbackState.currentTrack.duration = Math.round(this.audioEl.duration);
+            this.saveStateToStorage();
+            this.notify();
+          }
+        }
       });
 
       this.audioEl.addEventListener("timeupdate", () => {
@@ -77,6 +83,14 @@ class RealtimeSessionStore {
           this.session.playbackState.updatedAt = Date.now();
         }
       });
+    }
+  }
+
+  public updateCurrentTrackDuration(durationInSeconds: number) {
+    if (this.session.playbackState.currentTrack && durationInSeconds > 0) {
+      this.session.playbackState.currentTrack.duration = Math.round(durationInSeconds);
+      this.saveStateToStorage();
+      this.notify();
     }
   }
 
@@ -214,6 +228,14 @@ class RealtimeSessionStore {
     const state = this.session.playbackState;
     if (!state.currentTrack) return;
 
+    // If song reached the end when pressing Play, restart from zero (0:00)
+    if (state.currentPosition >= (state.currentTrack.duration || 215) - 1) {
+      state.currentPosition = 0;
+      if (this.audioEl) {
+        this.audioEl.currentTime = 0;
+      }
+    }
+
     const newIsPlaying = !state.isPlaying;
     const now = Date.now();
 
@@ -253,6 +275,8 @@ class RealtimeSessionStore {
       const nextQueueItem = this.session.queue[0];
       this.session.queue = this.session.queue.slice(1);
       this.playTrack(nextQueueItem.track);
+    } else {
+      this.seek(0);
     }
   }
 
@@ -371,7 +395,12 @@ class RealtimeSessionStore {
   }
 
   public leaveSession(userId: string) {
+    const user = this.session.participants.find((p) => p.id === userId);
     this.session.participants = this.session.participants.filter((p) => p.id !== userId);
+    if (user) {
+      this.addSystemChatMessage(`${user.name} left the listening room 🚪`);
+    }
+    this.saveStateToStorage();
     this.notify();
   }
 }
@@ -401,6 +430,8 @@ export function useRealtimeSession() {
     sendReaction: (emoji: string) => realtimeStore.sendReaction(emoji),
     sendChatMessage: (txt: string) => realtimeStore.sendChatMessage(txt),
     joinSession: (user: UserProfile) => realtimeStore.joinSession(user),
+    leaveSession: (userId: string) => realtimeStore.leaveSession(userId),
+    updateCurrentTrackDuration: (sec: number) => realtimeStore.updateCurrentTrackDuration(sec),
   };
 }
 
