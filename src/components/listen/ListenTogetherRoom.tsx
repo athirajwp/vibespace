@@ -76,9 +76,33 @@ export const ListenTogetherRoom: React.FC<ListenTogetherRoomProps> = ({ onClose 
   const [addedToast, setAddedToast] = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   const [listenMode, setListenModeState] = useState<"solo" | "group">("group");
+  const [sidePanelTab, setSidePanelTab] = useState<"upnext" | "chat">("upnext");
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [pendingInvite, setPendingInvite] = useState<{
+    id: string;
+    name: string;
+    username: string;
+    avatar: string;
+    status: "sending" | "received";
+  } | null>(null);
   const searchSectionRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStartX(e.touches[0].clientX);
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX === null) return;
+    const diffX = touchStartX - e.changedTouches[0].clientX;
+    if (diffX > 40) {
+      setSidePanelTab("chat");
+    } else if (diffX < -40) {
+      setSidePanelTab("upnext");
+    }
+    setTouchStartX(null);
+  };
 
   const scrollToChatBottom = () => {
     if (chatContainerRef.current) {
@@ -183,6 +207,52 @@ export const ListenTogetherRoom: React.FC<ListenTogetherRoomProps> = ({ onClose 
     setTimeout(() => setAddedToast(null), 3000);
   };
 
+  const playback = session.playbackState;
+  const currentTrack = playback.currentTrack;
+
+  // Real YouTube Music Up Next & Recommendations System
+  const [ytRecommendations, setYtRecommendations] = useState<Track[]>([]);
+  const [isLoadingRecs, setIsLoadingRecs] = useState<boolean>(false);
+  const [autoplayEnabled, setAutoplayEnabled] = useState<boolean>(true);
+
+  const fetchYouTubeRecommendations = async () => {
+    setIsLoadingRecs(true);
+    try {
+      const vidId = currentTrack?.id || "GqlGdhjEXNg";
+      const query = currentTrack?.artist && currentTrack?.artist !== "YouTube Artist"
+        ? `${currentTrack.artist} hit songs`
+        : currentTrack?.title
+        ? `${currentTrack.title} song`
+        : "popular music songs";
+
+      const res = await fetch(`/api/yt-search?videoId=${encodeURIComponent(vidId)}&q=${encodeURIComponent(query)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.tracks && Array.isArray(data.tracks)) {
+          const recs: Track[] = data.tracks.map((t: any) => ({
+            id: t.id,
+            title: t.title,
+            artist: t.artist || "YouTube Artist",
+            album: t.album || "YouTube Music",
+            coverArt: t.cover || `https://i.ytimg.com/vi/${t.id}/hqdefault.jpg`,
+            duration: t.duration || 215,
+            durationText: t.durationText || "3:30",
+            audioUrl: `https://www.youtube-nocookie.com/embed/${t.id}`,
+          }));
+          setYtRecommendations(recs);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch YouTube Music recommendations:", e);
+    } finally {
+      setIsLoadingRecs(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchYouTubeRecommendations();
+  }, [currentTrack?.id]);
+
   const handleDeletePlaylist = (playlistId: string) => {
     const plToDelete = playlists.find((p) => p.id === playlistId);
     if (!plToDelete) return;
@@ -272,9 +342,6 @@ export const ListenTogetherRoom: React.FC<ListenTogetherRoomProps> = ({ onClose 
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
-
-  const playback = session.playbackState;
-  const currentTrack = playback.currentTrack;
 
   // Auto-fetch real track duration from YouTube search API if currentTrack duration is 240 or missing
   useEffect(() => {
@@ -382,9 +449,31 @@ export const ListenTogetherRoom: React.FC<ListenTogetherRoomProps> = ({ onClose 
   };
 
   const handleInviteFriend = (friend: any) => {
-    joinSession(friend);
     setInvitedUserIds((prev) => new Set([...Array.from(prev), friend.id]));
-    setAddedToast(`Added ${friend.name} to Group Room! 🎉`);
+    setPendingInvite({
+      id: friend.id,
+      name: friend.name,
+      username: friend.username,
+      avatar: friend.avatar,
+      status: "sending",
+    });
+    setAddedToast(`Sending room invitation to ${friend.name}... 📩`);
+
+    setTimeout(() => {
+      setPendingInvite((prev) => (prev ? { ...prev, status: "received" } : null));
+    }, 700);
+  };
+
+  const handleAcceptInvite = (friend: any) => {
+    joinSession(friend);
+    setPendingInvite(null);
+    setAddedToast(`${friend.name} accepted your invitation & joined the room! 🎵🎉`);
+    setTimeout(() => setAddedToast(null), 4000);
+  };
+
+  const handleDeclineInvite = (friend: any) => {
+    setPendingInvite(null);
+    setAddedToast(`${friend.name} declined the room invitation.`);
     setTimeout(() => setAddedToast(null), 3000);
   };
 
@@ -464,80 +553,61 @@ export const ListenTogetherRoom: React.FC<ListenTogetherRoomProps> = ({ onClose 
         </div>
       </div>
 
-      {/* MUSIC ROOM TOP HEADER (SLEEK, BALANCED & PERFECTLY ALIGNED) */}
-      <div className="relative overflow-hidden p-3 sm:px-4 flex flex-col md:flex-row items-center justify-between gap-3 rounded-2xl text-[#050505] shadow-md shadow-blue-500/5 bg-gradient-to-r from-white via-blue-50/70 to-indigo-50/50 border border-[#1877F2]/25 backdrop-blur-2xl">
-        {/* Soft Ambient Mesh Glow Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-r from-[#1877F2]/10 via-purple-500/10 to-pink-500/5 pointer-events-none" />
+      {/* MUSIC ROOM TOP HEADER (GROUP MODE ONLY) */}
+      {listenMode === "group" && (
+        <div className="relative overflow-hidden p-3 sm:px-4 flex flex-col md:flex-row items-center justify-between gap-3 rounded-2xl text-[#050505] shadow-md shadow-blue-500/5 bg-gradient-to-r from-white via-blue-50/70 to-indigo-50/50 border border-[#1877F2]/25 backdrop-blur-2xl">
+          {/* Soft Ambient Mesh Glow Overlay */}
+          <div className="absolute inset-0 bg-gradient-to-r from-[#1877F2]/10 via-purple-500/10 to-pink-500/5 pointer-events-none" />
 
-        {/* Left Side: Host & Room Code Info */}
-        <div className="flex items-center gap-2 text-xs text-[#65676B] font-semibold relative z-10 whitespace-nowrap">
-          <span>Host: <strong className="text-[#050505] font-extrabold">{session.host.name}</strong></span>
-          <span className="text-[#1877F2]/40 font-bold">•</span>
-          <span>Code: <strong className="text-[#1877F2] font-extrabold font-mono bg-[#1877F2]/10 px-2 py-0.5 text-xs rounded-md border border-[#1877F2]/20">{session.roomCode || "VIBE-8842"}</strong></span>
-        </div>
+          {/* Left Side: Host & Room Code Info */}
+          <div className="flex items-center gap-2 text-xs text-[#65676B] font-semibold relative z-10 whitespace-nowrap">
+            <span>Host: <strong className="text-[#050505] font-extrabold">{session.host.name}</strong></span>
+            <span className="text-[#1877F2]/40 font-bold">•</span>
+            <span>Code: <strong className="text-[#1877F2] font-extrabold font-mono bg-[#1877F2]/10 px-2 py-0.5 text-xs rounded-md border border-[#1877F2]/20">{session.roomCode || "VIBE-8842"}</strong></span>
+          </div>
 
-        {/* Right Side: Action Buttons & Audience Counters */}
-        <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2 sm:gap-2.5 relative z-10">
-          {listenMode === "group" && (
-            <button
-              onClick={() => setIsInviteModalOpen(true)}
-              className="px-3.5 py-1.5 rounded-full bg-[#1877F2] hover:bg-blue-600 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-md shadow-blue-500/25 active:scale-95 transition-all whitespace-nowrap shrink-0"
-              title="Invite Friends to Group Room"
-            >
-              <UserPlus className="w-3.5 h-3.5 text-white stroke-[2.5]" />
-              <span className="whitespace-nowrap">+ Add Friends</span>
-            </button>
-          )}
+          {/* Right Side: Action Buttons & Audience Counters */}
+          <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2 sm:gap-2.5 relative z-10">
 
-          <button
-            onClick={() => setIsQueueModalOpen(true)}
-            className="px-3.5 py-1.5 rounded-full bg-[#1877F2]/10 hover:bg-[#1877F2]/20 border border-[#1877F2]/30 text-[#1877F2] font-extrabold text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition-all whitespace-nowrap shrink-0"
-            title="Open Room Playlist"
-          >
-            <ListMusic className="w-3.5 h-3.5 text-[#1877F2] stroke-[2.2]" />
-            <span className="whitespace-nowrap">Playlist ({session.queue.length})</span>
-          </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="flex -space-x-2.5 overflow-visible p-0.5 shrink-0 items-center">
+                {session.participants.map((user) => (
+                  <img
+                    key={user.id}
+                    src={user.avatar}
+                    alt={user.name}
+                    className="w-12 h-12 sm:w-12 sm:h-12 rounded-full border-2 border-white object-cover shadow-sm hover:scale-110 transition-transform shrink-0 cursor-pointer"
+                    onClick={() => setIsInviteModalOpen(true)}
+                    title={`${user.name} (Click to manage room members)`}
+                  />
+                ))}
 
-          <div className="flex items-center gap-2 shrink-0">
-            <div className="flex -space-x-1.5 overflow-hidden p-0.5 shrink-0 items-center">
-              {session.participants.map((user) => (
-                <img
-                  key={user.id}
-                  src={user.avatar}
-                  alt={user.name}
-                  className="w-6 h-6 sm:w-6.5 sm:h-6.5 rounded-full border-2 border-white object-cover shadow-sm hover:scale-110 transition-transform shrink-0 cursor-pointer"
-                  onClick={() => setIsInviteModalOpen(true)}
-                  title={`${user.name} (Click to manage room members)`}
-                />
-              ))}
-
-              {listenMode === "group" && (
                 <button
                   onClick={() => setIsInviteModalOpen(true)}
-                  className="w-6 h-6 sm:w-6.5 sm:h-6.5 rounded-full bg-[#1877F2] hover:bg-blue-600 border-2 border-white text-white flex items-center justify-center shadow-md shadow-blue-500/30 hover:scale-110 active:scale-95 transition-transform shrink-0 relative z-10"
+                  className="w-12 h-12 sm:w-12 sm:h-12 rounded-full bg-[#1877F2] hover:bg-blue-600 border-2 border-white text-white flex items-center justify-center shadow-lg shadow-blue-500/40 hover:scale-110 active:scale-95 transition-transform shrink-0 relative z-10"
                   title="Add / Remove Friends"
                 >
-                  <Plus className="w-3.5 h-3.5 text-white stroke-[3]" />
+                  <Plus className="w-6 h-6 text-white stroke-[3]" />
                 </button>
-              )}
-            </div>
+              </div>
 
-            <button
-              onClick={() => setIsInviteModalOpen(true)}
-              className="text-[11px] font-extrabold bg-white/90 hover:bg-blue-50 px-2.5 py-1 rounded-full border border-[#1877F2]/25 text-[#1877F2] shadow-sm flex items-center gap-1.5 whitespace-nowrap shrink-0 active:scale-95 transition-all"
-              title="Manage Room Members & Invite Friends"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span>{session.participants.length} Listening</span>
-            </button>
+              <button
+                onClick={() => setIsInviteModalOpen(true)}
+                className="text-[11px] font-extrabold bg-white/90 hover:bg-blue-50 px-2.5 py-1 rounded-full border border-[#1877F2]/25 text-[#1877F2] shadow-sm flex items-center gap-1.5 whitespace-nowrap shrink-0 active:scale-95 transition-all"
+                title="Manage Room Members & Invite Friends"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span>{session.participants.length} Listening</span>
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* ONLINE MUSIC STAGE MAIN GRID */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* LEFT COLUMN: ONLINE PLAYER STAGE (LIGHT THEME AMBIENT CARD) */}
-        <div className={`${listenMode === "solo" ? "lg:col-span-12" : "lg:col-span-7"} relative overflow-hidden p-6 sm:p-8 border border-[#1877F2]/25 flex flex-col justify-between space-y-6 shadow-xl shadow-blue-500/5 rounded-3xl bg-gradient-to-br from-white via-blue-50/70 to-indigo-50/50 text-[#050505] backdrop-blur-2xl transition-all`}>
+        {/* LEFT COLUMN: ONLINE PLAYER STAGE */}
+        <div className="lg:col-span-6 relative overflow-hidden p-6 sm:p-8 border border-[#1877F2]/25 flex flex-col justify-between space-y-6 shadow-xl shadow-blue-500/5 rounded-3xl bg-gradient-to-br from-white via-blue-50/70 to-indigo-50/50 text-[#050505] backdrop-blur-2xl transition-all">
           {/* Soft Ambient Mesh Glow Overlay */}
           <div className="absolute inset-0 bg-gradient-to-r from-[#1877F2]/10 via-purple-500/10 to-pink-500/5 pointer-events-none" />
 
@@ -585,22 +655,10 @@ export const ListenTogetherRoom: React.FC<ListenTogetherRoomProps> = ({ onClose 
               </div>
             </div>
 
-            {/* Single Horizontal Controls Row with Playback Controls & Playlist Button */}
-            <div className="flex items-center justify-between gap-2 sm:gap-4 pt-1 px-1">
-              {/* 1. Playlist Button (Left) */}
-              <button
-                onClick={() => setIsQueueModalOpen(true)}
-                className="w-10 h-10 rounded-full bg-[#1877F2] hover:bg-blue-600 text-white flex items-center justify-center relative shadow-md shadow-blue-500/25 active:scale-95 transition-all shrink-0 group"
-                title={`Open Room Playlist (${activePlaylist.tracks.length} songs)`}
-              >
-                <ListMusic className="w-5 h-5 text-white stroke-[2.2]" />
-                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-purple-600 text-white font-extrabold text-[9px] flex items-center justify-center border-2 border-white shadow-md">
-                  {activePlaylist.tracks.length}
-                </span>
-              </button>
-
-              {/* 2. Centered Playback Controls (Previous, Play/Pause, Next) */}
-              <div className="flex items-center justify-center gap-2.5 sm:gap-3">
+            {/* Single Horizontal Controls Row with Playback Controls & Playlist Pill Button */}
+            <div className="flex items-center justify-between gap-3 pt-1 px-1">
+              {/* Left Side: Playback Controls (Previous, Play/Pause, Next) */}
+              <div className="flex items-center gap-2.5 sm:gap-3">
                 {/* Previous Track Button */}
                 <button
                   onClick={handlePlayPrevPlaylistTrack}
@@ -633,90 +691,294 @@ export const ListenTogetherRoom: React.FC<ListenTogetherRoomProps> = ({ onClose 
                 </button>
               </div>
 
-              {/* 3. Symmetric Spacer */}
-              <div className="w-10 h-10 shrink-0" />
+              {/* Right Side: Playlist Pill Button (Exact Match to User Mockup) */}
+              <button
+                onClick={() => setIsQueueModalOpen(true)}
+                className="px-3.5 py-2 rounded-full bg-[#1877F2]/10 hover:bg-[#1877F2]/20 border border-[#1877F2]/30 text-[#1877F2] font-extrabold text-xs flex items-center gap-1.5 shadow-xs active:scale-95 transition-all whitespace-nowrap shrink-0"
+                title={`Open Room Playlist (${activePlaylist.tracks.length} songs)`}
+              >
+                <ListMusic className="w-4 h-4 text-[#1877F2] stroke-[2.2]" />
+                <span className="whitespace-nowrap">Playlist ({activePlaylist.tracks.length})</span>
+              </button>
             </div>
           </div>
         </div>
 
-        {/* RIGHT COLUMN: DEDICATED ROOM LIVE CHAT (LIGHT THEME AMBIENT CARD - GROUP MODE ONLY) */}
-        {listenMode === "group" && (
-          <div className="lg:col-span-5 flex flex-col h-[600px]">
-            <div className="relative overflow-hidden border border-[#1877F2]/25 rounded-3xl p-5 flex flex-col h-full space-y-4 bg-gradient-to-br from-white via-blue-50/70 to-indigo-50/50 text-[#050505] shadow-xl shadow-blue-500/5 backdrop-blur-2xl">
-              {/* Soft Ambient Mesh Glow Overlay */}
-              <div className="absolute inset-0 bg-gradient-to-r from-[#1877F2]/10 via-purple-500/10 to-pink-500/5 pointer-events-none" />
+        {/* RIGHT COLUMN: INTERACTIVE SIDE PANEL (UP NEXT & LIVE CHAT SIDE-BY-SIDE SLIDER) */}
+        <div className="lg:col-span-6 flex flex-col h-[560px]">
+          <div
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+            className="relative overflow-hidden border border-[#1877F2]/25 rounded-3xl p-5 flex flex-col h-full space-y-4 bg-gradient-to-br from-white via-blue-50/70 to-indigo-50/50 text-[#050505] shadow-xl shadow-blue-500/5 backdrop-blur-2xl"
+          >
+            {/* Soft Ambient Mesh Glow Overlay */}
+            <div className="absolute inset-0 bg-gradient-to-r from-[#1877F2]/10 via-purple-500/10 to-pink-500/5 pointer-events-none" />
 
-              <div className="flex items-center justify-between border-b border-[#1877F2]/15 pb-3 relative z-10">
-                <h3 className="font-extrabold text-sm text-[#050505] flex items-center gap-2">
+            {/* TOP TAB HEADER (GROUP MODE: UP NEXT & LIVE CHAT SEGMENTED CONTROL | SOLO MODE: UP NEXT HEADER) */}
+            <div className="border-b border-[#1877F2]/15 pb-3 relative z-10">
+              {listenMode === "group" ? (
+                <div className="w-full grid grid-cols-2 gap-1.5 p-1.5 bg-white/90 rounded-2xl border border-[#1877F2]/20 shadow-xs backdrop-blur-xl">
+                  <button
+                    onClick={() => setSidePanelTab("upnext")}
+                    className={`w-full py-2.5 px-4 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition-all active:scale-95 ${
+                      sidePanelTab === "upnext"
+                        ? "bg-[#1877F2] text-white shadow-md shadow-blue-500/25"
+                        : "text-[#65676B] hover:text-[#050505] hover:bg-[#F0F2F5]"
+                    }`}
+                  >
+                    <Music className="w-4 h-4" />
+                    <span>Up Next</span>
+                  </button>
+
+                  <button
+                    onClick={() => setSidePanelTab("chat")}
+                    className={`w-full py-2.5 px-4 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition-all active:scale-95 ${
+                      sidePanelTab === "chat"
+                        ? "bg-[#1877F2] text-white shadow-md shadow-blue-500/25"
+                        : "text-[#65676B] hover:text-[#050505] hover:bg-[#F0F2F5]"
+                    }`}
+                  >
+                    <Users className="w-4 h-4" />
+                    <span>Live Chat</span>
+                    {session.liveChat?.length ? (
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                        sidePanelTab === "chat" ? "bg-white/30 text-white" : "bg-[#1877F2]/15 text-[#1877F2]"
+                      }`}>
+                        {session.liveChat.length}
+                      </span>
+                    ) : null}
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 px-3.5 py-2.5 bg-white/90 rounded-2xl border border-[#1877F2]/20 shadow-xs backdrop-blur-xl text-xs font-extrabold text-[#050505]">
                   <Music className="w-4 h-4 text-[#1877F2]" />
-                  <span>Room Live Chat</span>
-                </h3>
-                <span className="text-[11px] font-extrabold text-[#1877F2] bg-white/90 px-2.5 py-1 rounded-full border border-[#1877F2]/20 shadow-sm">
-                  {session.liveChat?.length || 0} messages
-                </span>
-              </div>
+                  <span className="uppercase tracking-wider">Up Next</span>
+                </div>
+              )}
+            </div>
 
-              <div ref={chatContainerRef} className="flex-1 overflow-y-auto space-y-3 pr-1 no-scrollbar relative z-10">
-                {(session.liveChat || []).map((msg) => (
-                  <div key={msg.id} className="p-3.5 rounded-2xl bg-white/80 border border-[#1877F2]/15 shadow-sm space-y-1 hover:border-[#1877F2]/30 transition-all">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-extrabold text-[#1877F2]">{msg.author.name}</span>
-                      <span className="text-[10px] font-semibold text-[#65676B]">{msg.time}</span>
-                    </div>
-                    <p className="text-xs font-medium text-[#050505]">{msg.text}</p>
-                  </div>
-                ))}
-                <div ref={chatEndRef} />
-              </div>
-
-              {/* Desktop Only Chat Input Form */}
-              <form
-                onSubmit={handleSendChat}
-                className="hidden lg:flex gap-2.5 p-2.5 border-t border-[#1877F2]/20 bg-white/95 backdrop-blur-xl rounded-2xl shadow-sm shrink-0 mt-auto"
+            {/* SLIDING PANELS CONTAINER (UP NEXT & LIVE CHAT SIDE-BY-SIDE WITH SMOOTH TRANSITION) */}
+            <div className="flex-1 overflow-hidden relative z-10">
+              <div
+                className={`${listenMode === "solo" ? "w-full" : "w-[200%]"} h-full flex transition-transform duration-300 ease-out ${
+                  sidePanelTab === "upnext" || listenMode === "solo" ? "translate-x-0" : "-translate-x-1/2"
+                }`}
               >
-                <input
-                  type="text"
-                  value={chatInput}
-                  onFocus={scrollToChatBottom}
-                  onClick={scrollToChatBottom}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  placeholder="Chat with room..."
-                  className="flex-1 bg-white border border-[#1877F2]/30 rounded-xl px-4 py-2.5 text-xs text-[#050505] placeholder-[#65676B] focus:outline-none focus:border-[#1877F2] focus:ring-2 focus:ring-[#1877F2]/20 transition-all font-medium shadow-sm"
-                />
-                <button
-                  type="submit"
-                  className="px-6 py-2.5 bg-[#1877F2] hover:bg-blue-600 rounded-xl text-xs font-extrabold text-white transition-all shadow-md shadow-blue-500/25 active:scale-95 shrink-0"
-                >
-                  Send
-                </button>
-              </form>
+                {/* PANEL 1: UP NEXT RECOMMENDED SONGS */}
+                <div className={`${listenMode === "solo" ? "w-full pr-0" : "w-1/2 pr-2"} h-full flex flex-col space-y-3`}>
+                  <div className="flex items-center justify-between gap-3 pt-1">
+                    <div>
+                      <span className="text-[10px] text-[#65676B] block font-medium">Playing from</span>
+                      <h4 className="text-xs font-black text-[#050505] truncate max-w-[200px]">
+                        {activePlaylist.name || currentTrack?.title || "YouTube"} Mix
+                      </h4>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-[#65676B]">Autoplay</span>
+                      <button
+                        onClick={() => setAutoplayEnabled(!autoplayEnabled)}
+                        className={`w-9 h-4.5 rounded-full p-0.5 transition-colors flex items-center ${
+                          autoplayEnabled ? "bg-[#1877F2]" : "bg-[#E4E6EB]"
+                        }`}
+                      >
+                        <div
+                          className={`w-3.5 h-3.5 rounded-full bg-white shadow-md transform transition-transform ${
+                            autoplayEnabled ? "translate-x-4.5" : "translate-x-0"
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-[#65676B] font-semibold px-0.5">
+                    <span>Autoplay is {autoplayEnabled ? "on" : "off"}</span>
+                    <button
+                      onClick={fetchYouTubeRecommendations}
+                      disabled={isLoadingRecs}
+                      className="text-[#1877F2] hover:underline font-bold flex items-center gap-1"
+                    >
+                      {isLoadingRecs ? <Loader2 className="w-3 h-3 animate-spin" /> : <span>Refresh 🔄</span>}
+                    </button>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 no-scrollbar pt-1 border-t border-[#1877F2]/15">
+                    {isLoadingRecs ? (
+                      <div className="flex items-center justify-center py-8 gap-2 text-xs font-bold text-[#1877F2]">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Fetching real recommendations...</span>
+                      </div>
+                    ) : ytRecommendations.length === 0 ? (
+                      <div className="text-center py-6 text-[#65676B] text-xs font-medium bg-[#F0F2F5] rounded-xl border border-[#E4E6EB]">
+                        No recommendations found. Click "Refresh 🔄" above!
+                      </div>
+                    ) : (
+                      ytRecommendations.map((song) => {
+                        const isAlreadyInPlaylist = activePlaylist.tracks.some(
+                          (t) => t.id === song.id || t.title.trim().toLowerCase() === song.title.trim().toLowerCase()
+                        );
+                        return (
+                          <div
+                            key={song.id}
+                            onClick={() => playTrack(song)}
+                            className="p-2 rounded-xl bg-white/80 hover:bg-white border border-[#1877F2]/15 hover:border-[#1877F2]/40 flex items-center justify-between gap-3 cursor-pointer transition-all group shadow-2xs"
+                          >
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                              <img
+                                src={song.coverArt}
+                                alt={song.title}
+                                className="w-10 h-10 rounded-lg object-cover shrink-0 border border-[#E4E6EB] group-hover:scale-105 transition-transform"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-bold text-[#050505] truncate group-hover:text-[#1877F2] transition-colors">
+                                  {song.title}
+                                </p>
+                                <p className="text-[11px] text-[#65676B] truncate">{song.artist}</p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-xs font-mono font-bold text-[#65676B]">
+                                {song.durationText || `${Math.floor((song.duration || 200) / 60)}:${((song.duration || 200) % 60).toString().padStart(2, "0")}`}
+                              </span>
+
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleAddTrack(song);
+                                }}
+                                disabled={isAlreadyInPlaylist}
+                                className={`p-1.5 rounded-lg text-xs font-bold transition-all ${
+                                  isAlreadyInPlaylist
+                                    ? "text-emerald-600 bg-emerald-500/10 cursor-default"
+                                    : "text-[#050505] hover:bg-[#1877F2]/15 hover:text-[#1877F2]"
+                                }`}
+                                title={isAlreadyInPlaylist ? "Already in playlist" : `Add to ${activePlaylist.name}`}
+                              >
+                                {isAlreadyInPlaylist ? <Check className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+                {/* PANEL 2: ROOM LIVE CHAT (GROUP MODE ONLY) */}
+                {listenMode === "group" && (
+                  <div className="w-1/2 h-full flex flex-col space-y-3 pl-2">
+                    <div ref={chatContainerRef} className="flex-1 overflow-y-auto space-y-3 pr-1 no-scrollbar">
+                      {(session.liveChat || []).length === 0 ? (
+                        <div className="text-center py-12 text-xs font-semibold text-[#65676B]">
+                          No messages yet. Say hi to the room! 👋
+                        </div>
+                      ) : (
+                        (session.liveChat || []).map((msg) => (
+                          <div key={msg.id} className="p-3 rounded-2xl bg-white/90 border border-[#1877F2]/15 shadow-2xs space-y-1 hover:border-[#1877F2]/30 transition-all">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-extrabold text-[#1877F2]">{msg.author.name}</span>
+                              <span className="text-[10px] font-semibold text-[#65676B]">{msg.time}</span>
+                            </div>
+                            <p className="text-xs font-medium text-[#050505]">{msg.text}</p>
+                          </div>
+                        ))
+                      )}
+                      <div ref={chatEndRef} />
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Mobile/Tablet Fixed Chat Form (GROUP MODE ONLY) */}
+      {/* STICKY CHAT INPUT BAR FIXED ABOVE BOTTOM NAV BAR (STAYS IN PLACE ON SCROLL) */}
       {listenMode === "group" && (
-        <div className="lg:hidden fixed bottom-16 left-0 right-0 z-50 p-2.5 px-3 bg-white/95 backdrop-blur-2xl border-t border-[#1877F2]/30 shadow-2xl">
-          <form onSubmit={handleSendChat} className="flex gap-2.5 max-w-xl mx-auto">
+        <div className="fixed bottom-16 sm:bottom-4 left-4 right-4 max-w-xl sm:max-w-md mx-auto z-50 p-2 bg-white/95 backdrop-blur-2xl border border-[#1877F2]/30 rounded-2xl shadow-2xl transition-all">
+          <form
+            onSubmit={handleSendChat}
+            className="flex gap-2 items-center"
+          >
             <input
               type="text"
               value={chatInput}
-              onFocus={scrollToChatBottom}
-              onClick={scrollToChatBottom}
+              onFocus={() => {
+                setSidePanelTab("chat");
+                setTimeout(scrollToChatBottom, 50);
+              }}
+              onClick={() => {
+                setSidePanelTab("chat");
+                setTimeout(scrollToChatBottom, 50);
+              }}
               onChange={(e) => setChatInput(e.target.value)}
               placeholder="Chat with room..."
-              className="flex-1 bg-white border border-[#1877F2]/30 rounded-xl px-4 py-2.5 text-xs text-[#050505] placeholder-[#65676B] focus:outline-none focus:border-[#1877F2] focus:ring-2 focus:ring-[#1877F2]/20 transition-all font-medium shadow-sm"
+              className="flex-1 bg-white border border-[#1877F2]/30 rounded-xl px-4 py-2 text-xs text-[#050505] placeholder-[#65676B] focus:outline-none focus:border-[#1877F2] focus:ring-2 focus:ring-[#1877F2]/20 transition-all font-medium shadow-xs"
             />
             <button
               type="submit"
-              className="px-6 py-2.5 bg-[#1877F2] hover:bg-blue-600 rounded-xl text-xs font-extrabold text-white transition-all shadow-md shadow-blue-500/25 active:scale-95 shrink-0"
+              className="px-5 py-2 bg-[#1877F2] hover:bg-blue-600 rounded-xl text-xs font-extrabold text-white transition-all shadow-md shadow-blue-500/25 active:scale-95 shrink-0"
             >
               Send
             </button>
           </form>
         </div>
       )}
+
+      {/* REAL-TIME FRIEND INVITATION POPUP BANNER */}
+      {pendingInvite && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[300] w-full max-w-md px-4 animate-in slide-in-from-top-5 fade-in duration-300">
+          <div className="bg-white/95 border-2 border-[#1877F2] p-4.5 rounded-3xl shadow-2xl shadow-blue-500/30 backdrop-blur-2xl space-y-3.5">
+            <div className="flex items-center justify-between border-b border-[#E4E6EB] pb-2.5">
+              <div className="flex items-center gap-2 text-xs font-black text-[#1877F2]">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
+                <span>INCOMING ROOM INVITATION RESPONDER</span>
+              </div>
+              <button
+                onClick={() => setPendingInvite(null)}
+                className="text-[#65676B] hover:text-[#050505] p-1 rounded-full hover:bg-[#F0F2F5]"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <img
+                src={pendingInvite.avatar}
+                alt={pendingInvite.name}
+                className="w-12 h-12 rounded-full object-cover border-2 border-[#1877F2] shadow-md shrink-0"
+              />
+              <div className="flex-1 min-w-0">
+                <h4 className="text-xs font-black text-[#050505] truncate">{pendingInvite.name}</h4>
+                <p className="text-[11px] text-[#65676B] font-medium leading-tight">
+                  {pendingInvite.status === "sending"
+                    ? `Sending room invite (${session.roomCode || "VIBE-8842"})...`
+                    : `Received invitation to join your Group Listening Room!`}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                onClick={() => handleAcceptInvite(pendingInvite)}
+                className="flex-1 py-2.5 px-4 bg-[#1877F2] hover:bg-blue-600 rounded-xl text-xs font-extrabold text-white transition-all shadow-md shadow-blue-500/25 active:scale-95 flex items-center justify-center gap-1.5"
+              >
+                <Check className="w-4 h-4" />
+                <span>Accept & Join Room 🎵</span>
+              </button>
+              <button
+                onClick={() => handleDeclineInvite(pendingInvite)}
+                className="py-2.5 px-4 bg-[#F0F2F5] hover:bg-rose-50 hover:text-rose-600 rounded-xl text-xs font-extrabold text-[#65676B] border border-[#E4E6EB] transition-all active:scale-95"
+              >
+                Decline
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+
 
       {/* POP-UP QUEUE MODAL WITH LIVE YOUTUBE MUSIC SEARCH (STUNNING LIGHT THEME AMBIENT CARD) */}
       {isQueueModalOpen && (

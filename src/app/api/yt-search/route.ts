@@ -34,106 +34,141 @@ function extractYtDurationSeconds(video: any): number {
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const query = searchParams.get("q");
+  const videoId = searchParams.get("videoId");
 
-  if (!query || !query.trim()) {
+  if ((!query || !query.trim()) && !videoId) {
     return NextResponse.json({ suggestions: [], tracks: [] });
   }
 
   try {
-    // 1. Fetch Real YouTube Auto-Suggest Queries
-    const suggestRes = await fetch(
-      `https://suggestqueries-clients6.youtube.com/complete/search?client=youtube-reduced&hl=en&ds=yt&q=${encodeURIComponent(
-        query
-      )}`,
-      {
+    const tracks: any[] = [];
+    let suggestions: string[] = [];
+
+    // 1. If videoId is provided, fetch REAL YouTube Watch Next recommendations!
+    if (videoId) {
+      const watchUrl = `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
+      const watchRes = await fetch(watchUrl, {
         headers: {
           "User-Agent":
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Accept-Language": "en-US,en;q=0.9",
         },
-      }
-    );
+      });
 
-    let suggestions: string[] = [];
-    if (suggestRes.ok) {
-      const suggestText = await suggestRes.text();
-      // Format: window.google.ac.h(["query",[["sug1",0],["sug2",0]]]) or JSON array
-      const matches = suggestText.match(/\["([^"]+)",0\]/g);
-      if (matches) {
-        suggestions = matches
-          .map((m) => m.replace(/\["|",0\]/g, ""))
-          .slice(0, 6);
-      }
-    }
+      if (watchRes.ok) {
+        const html = await watchRes.text();
+        const match = html.match(/var ytInitialData = ({.*?});<\/script>/);
+        if (match && match[1]) {
+          try {
+            const ytData = JSON.parse(match[1]);
+            const secondary =
+              ytData?.contents?.twoColumnWatchNextResults?.secondaryResults
+                ?.secondaryResults?.results || [];
 
-    if (suggestions.length === 0) {
-      suggestions = [
-        `${query} story`,
-        `${query} pattas`,
-        `${query} kudiye song`,
-        `${query} song`,
-        `${query} kudiye`,
-        `${query} song with lyrics`,
-      ];
-    }
+            for (const item of secondary) {
+              const compact = item?.compactVideoRenderer;
+              if (compact && compact.videoId && (compact.title?.simpleText || compact.title?.runs?.[0]?.text)) {
+                const vid = compact.videoId;
+                const title = compact.title.simpleText || compact.title?.runs?.[0]?.text || "YouTube Track";
+                const channel =
+                  compact.longBylineText?.runs?.[0]?.text ||
+                  compact.shortBylineText?.runs?.[0]?.text ||
+                  "YouTube Music";
+                const lengthText = extractYtDurationText(compact);
+                const durationSec = extractYtDurationSeconds(compact);
 
-    // 2. Fetch Real YouTube Search HTML / Data
-    const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(
-      query + " song"
-    )}`;
-    const ytRes = await fetch(searchUrl, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-    });
+                tracks.push({
+                  id: vid,
+                  title: title,
+                  type: "Song",
+                  artist: channel,
+                  duration: durationSec > 0 ? durationSec : 215,
+                  durationText: lengthText || "3:30",
+                  cover: `https://i.ytimg.com/vi/${vid}/hqdefault.jpg`,
+                  coverArt: `https://i.ytimg.com/vi/${vid}/hqdefault.jpg`,
+                });
 
-    const tracks: any[] = [];
-    if (ytRes.ok) {
-      const html = await ytRes.text();
-      // Parse ytInitialData JSON object from YouTube HTML response
-      const match = html.match(/var ytInitialData = ({.*?});<\/script>/);
-      if (match && match[1]) {
-        try {
-          const ytData = JSON.parse(match[1]);
-          const contents =
-            ytData?.contents?.twoColumnSearchResultsRenderer
-              ?.primaryContents?.sectionListRenderer?.contents?.[0]
-              ?.itemSectionRenderer?.contents || [];
-
-          for (const item of contents) {
-            const video = item?.videoRenderer;
-            if (video && video.videoId && video.title?.runs?.[0]?.text) {
-              const videoId = video.videoId;
-              const title = video.title.runs[0].text;
-              const channel =
-                video.ownerText?.runs?.[0]?.text ||
-                video.shortBylineText?.runs?.[0]?.text ||
-                "YouTube Music";
-              const stats =
-                video.viewCountText?.simpleText ||
-                video.shortViewCountText?.simpleText ||
-                "Official Song";
-              const lengthText = extractYtDurationText(video);
-              const durationSec = extractYtDurationSeconds(video);
-
-              tracks.push({
-                id: videoId,
-                title: title,
-                type: "Song",
-                artist: channel,
-                stats: stats,
-                duration: durationSec > 0 ? durationSec : 215,
-                durationText: lengthText,
-                cover: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-                coverArt: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-              });
-
-              if (tracks.length >= 6) break;
+                if (tracks.length >= 15) break;
+              }
             }
-          }
-        } catch (e) {
-          // Ignore parse errors
+          } catch (e) {}
+        }
+      }
+    }
+
+    // 2. Fetch Real YouTube Search HTML / Data if query or if videoId returned few tracks
+    if (tracks.length < 5 && query) {
+      const suggestRes = await fetch(
+        `https://suggestqueries-clients6.youtube.com/complete/search?client=youtube-reduced&hl=en&ds=yt&q=${encodeURIComponent(
+          query
+        )}`,
+        {
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          },
+        }
+      );
+
+      if (suggestRes.ok) {
+        const suggestText = await suggestRes.text();
+        const matches = suggestText.match(/\["([^"]+)",0\]/g);
+        if (matches) {
+          suggestions = matches.map((m) => m.replace(/\["|",0\]/g, "")).slice(0, 6);
+        }
+      }
+
+      const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(
+        query + " song"
+      )}`;
+      const ytRes = await fetch(searchUrl, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Accept-Language": "en-US,en;q=0.9",
+        },
+      });
+
+      if (ytRes.ok) {
+        const html = await ytRes.text();
+        const match = html.match(/var ytInitialData = ({.*?});<\/script>/);
+        if (match && match[1]) {
+          try {
+            const ytData = JSON.parse(match[1]);
+            const contents =
+              ytData?.contents?.twoColumnSearchResultsRenderer
+                ?.primaryContents?.sectionListRenderer?.contents?.[0]
+                ?.itemSectionRenderer?.contents || [];
+
+            for (const item of contents) {
+              const video = item?.videoRenderer;
+              if (video && video.videoId && video.title?.runs?.[0]?.text) {
+                const vid = video.videoId;
+                if (!tracks.some((t) => t.id === vid)) {
+                  const title = video.title.runs[0].text;
+                  const channel =
+                    video.ownerText?.runs?.[0]?.text ||
+                    video.shortBylineText?.runs?.[0]?.text ||
+                    "YouTube Music";
+                  const lengthText = extractYtDurationText(video);
+                  const durationSec = extractYtDurationSeconds(video);
+
+                  tracks.push({
+                    id: vid,
+                    title: title,
+                    type: "Song",
+                    artist: channel,
+                    duration: durationSec > 0 ? durationSec : 215,
+                    durationText: lengthText || "3:30",
+                    cover: `https://i.ytimg.com/vi/${vid}/hqdefault.jpg`,
+                    coverArt: `https://i.ytimg.com/vi/${vid}/hqdefault.jpg`,
+                  });
+
+                  if (tracks.length >= 15) break;
+                }
+              }
+            }
+          } catch (e) {}
         }
       }
     }
@@ -153,10 +188,10 @@ export async function GET(req: NextRequest) {
         ]
       };
 
-      const qLower = query.toLowerCase();
-      if (qLower.includes("kutty") || qLower.includes("kutti") || qLower.includes("nala")) {
+      const qLower = (query || "").toLowerCase();
+      if (qLower && (qLower.includes("kutty") || qLower.includes("kutti") || qLower.includes("nala"))) {
         tracks.push(...fallbackDatabase.kutty);
-      } else if (qLower.includes("anul") || qLower.includes("panithuli")) {
+      } else if (qLower && (qLower.includes("anul") || qLower.includes("panithuli"))) {
         tracks.push(...fallbackDatabase.anul);
       }
     }

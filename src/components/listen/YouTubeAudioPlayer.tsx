@@ -251,7 +251,7 @@ export const YouTubeAudioPlayer: React.FC<YouTubeAudioPlayerProps> = ({
       </div>
 
       {/* COMPACT YOUTUBE VIDEO THUMBNAIL CARD */}
-      <div className="relative w-full aspect-video max-h-36 sm:max-h-40 rounded-xl overflow-hidden border border-red-500/30 shadow-lg shadow-red-500/10 bg-slate-950 group my-1">
+      <div className="relative w-full aspect-video max-h-36 sm:max-h-40 rounded-2xl overflow-hidden border border-[#1877F2]/25 shadow-md bg-white group my-1">
         <img
           src={activeStream.cover}
           alt={activeStream.title}

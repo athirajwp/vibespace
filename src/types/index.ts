@@ -28,6 +28,7 @@ export interface Track {
   album: string;
   coverArt: string;
   duration: number; // in seconds
+  durationText?: string;
   audioUrl: string; // playable stream URL
   genre?: string;
   releaseYear?: number;

@@ -77,32 +77,32 @@ export const SpotifyEmbed: React.FC<SpotifyEmbedProps> = ({
       {/* Search & URL Input Bar */}
       <form onSubmit={handleLoadTrack} className="flex items-center gap-2">
         <div className="relative flex-1">
-          <Search className="w-4 h-4 text-emerald-500 absolute left-3 top-3" />
+          <Search className="w-4 h-4 text-[#1877F2] absolute left-3 top-3" />
           <input
             type="text"
             value={trackInput}
             onChange={(e) => setTrackInput(e.target.value)}
             placeholder="Paste Spotify track URL or ID..."
-            className="w-full py-2.5 pl-9 pr-3 rounded-2xl bg-slate-900 border border-emerald-500/30 text-xs font-semibold text-white placeholder-slate-400 focus:outline-none focus:border-emerald-400 transition-all"
+            className="w-full py-2.5 pl-9 pr-3 rounded-2xl bg-white border border-[#1877F2]/25 text-xs font-semibold text-[#050505] placeholder-[#65676B] focus:outline-none focus:border-[#1877F2] transition-all shadow-sm"
           />
         </div>
         <button
           type="submit"
-          className="px-4 py-2.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs shadow-md shadow-emerald-500/20 active:scale-95 transition-all"
+          className="px-4 py-2.5 rounded-2xl bg-[#1877F2] hover:bg-blue-600 text-white font-extrabold text-xs shadow-md shadow-blue-500/20 active:scale-95 transition-all"
         >
           Load
         </button>
       </form>
 
       {/* Spotify Direct Launch Action Bar */}
-      <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-900 border border-emerald-500/30 text-white">
+      <div className="flex items-center justify-between p-3 rounded-2xl bg-white/90 border border-[#1877F2]/20 text-[#050505] shadow-sm backdrop-blur-xl">
         <div className="flex items-center gap-2">
-          <Music className="w-4 h-4 text-emerald-400" />
-          <span className="text-xs font-extrabold text-white">Spotify Player Mode</span>
+          <Music className="w-4 h-4 text-[#1877F2]" />
+          <span className="text-xs font-extrabold text-[#050505]">Spotify Player Mode</span>
         </div>
         <button
           onClick={handleOpenSpotifyApp}
-          className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs flex items-center gap-1.5 shadow-md shadow-emerald-500/20 active:scale-95 transition-all"
+          className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-md shadow-emerald-500/20 active:scale-95 transition-all"
         >
           <ExternalLink className="w-3.5 h-3.5" />
           <span>Open on Spotify</span>
@@ -110,7 +110,7 @@ export const SpotifyEmbed: React.FC<SpotifyEmbedProps> = ({
       </div>
 
       {/* Spotify iFrame Player Widget */}
-      <div className="rounded-2xl overflow-hidden border border-emerald-500/30 shadow-2xl bg-slate-950 my-2">
+      <div className="rounded-2xl overflow-hidden border border-[#1877F2]/20 shadow-md bg-white my-2">
         <iframe
           src={`https://open.spotify.com/embed/track/${activeTrackId}?utm_source=generator&theme=0`}
           width="100%"
@@ -126,8 +126,8 @@ export const SpotifyEmbed: React.FC<SpotifyEmbedProps> = ({
       <audio ref={audioRef} src={activeStream.audioUrl} loop className="hidden" />
 
       {/* Helpful Hint */}
-      <p className="text-[11px] font-semibold text-slate-400 text-center">
-        💡 <strong className="text-emerald-400">Tip:</strong> Click the play button inside the Spotify player card above or press system play controls below to listen to audio!
+      <p className="text-[11px] font-semibold text-[#65676B] text-center">
+        💡 <strong className="text-[#1877F2]">Tip:</strong> Click the play button inside the Spotify player card above or press system play controls below to listen to audio!
       </p>
     </div>
   );
