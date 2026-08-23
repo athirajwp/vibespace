@@ -33,6 +33,16 @@ export interface Track {
   releaseYear?: number;
 }
 
+export interface CustomPlaylist {
+  id: string;
+  name: string;
+  description?: string;
+  coverArt?: string;
+  tracks: Track[];
+  createdAt: number;
+  isDefault?: boolean;
+}
+
 export interface Post {
   id: string;
   author: UserProfile;

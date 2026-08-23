@@ -10,6 +10,7 @@ import { SocialFeed } from "@/components/feed/SocialFeed";
 import { ChatView } from "@/components/messages/ChatView";
 import { ListenTogetherRoom } from "@/components/listen/ListenTogetherRoom";
 import { MiniMusicPlayer } from "@/components/listen/MiniMusicPlayer";
+import { GlobalAudioEngine } from "@/components/listen/GlobalAudioEngine";
 import { LiveVoiceRoomModal } from "@/components/voice/LiveVoiceRoomModal";
 import { ProfileView } from "@/components/profile/ProfileView";
 import { SettingsView } from "@/components/settings/SettingsView";
@@ -34,6 +35,23 @@ export default function HomePage() {
   const [isVoiceRoomOpen, setIsVoiceRoomOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+
+  // Restore last active page tab on website reload & persist activeTab changes
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedTab = localStorage.getItem("vibespace_active_tab") as NavTab | null;
+      const validTabs: NavTab[] = ["home", "messages", "listen", "live", "profile", "settings"];
+      if (savedTab && validTabs.includes(savedTab)) {
+        setActiveTab(savedTab);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("vibespace_active_tab", activeTab);
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     async function loadApiPosts() {
@@ -180,7 +198,11 @@ export default function HomePage() {
         )}
       </div>
 
-      {/* 3. Global Persistent Music Player moved to TopNav Header */}
+      {/* 3. Global Persistent Audio Engine & Background Mini Player */}
+      <GlobalAudioEngine />
+      {activeTab !== "listen" && session.playbackState.currentTrack && (
+        <MiniMusicPlayer onOpenFullRoom={() => setActiveTab("listen")} />
+      )}
 
       {/* 4. Mobile Bottom Navigation Bar */}
       <MobileNav

@@ -229,6 +229,12 @@ class RealtimeSessionStore {
   }
 
   public addToQueue(track: Track, user: UserProfile = CURRENT_USER) {
+    const exists = this.session.queue.some(
+      (item) => item.track.id === track.id || item.track.title.trim().toLowerCase() === track.title.trim().toLowerCase()
+    );
+    if (exists) {
+      return;
+    }
     const newItem: QueueItem = {
       id: `q-${Date.now()}`,
       track,

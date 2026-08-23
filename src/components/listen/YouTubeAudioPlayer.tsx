@@ -240,18 +240,6 @@ export const YouTubeAudioPlayer: React.FC<YouTubeAudioPlayerProps> = ({
           <span>YouTube Music</span>
         </div>
       </div>
-
-      {/* Hidden YouTube Engine iFrame */}
-      <iframe
-        ref={iframeRef}
-        key={videoId}
-        src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&enablejsapi=1`}
-        title="YouTube Music Audio Engine"
-        width="0"
-        height="0"
-        allow="autoplay; encrypted-media"
-        className="hidden w-0 h-0 absolute pointer-events-none opacity-0"
-      />
     </div>
   );
 };
