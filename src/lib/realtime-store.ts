@@ -21,8 +21,41 @@ class RealtimeSessionStore {
   constructor() {
     if (typeof window !== "undefined") {
       this.initAudioEngine();
+      this.hydrateFromStorage();
       this.startSyncLoop();
     }
+  }
+
+  private hydrateFromStorage() {
+    if (typeof window === "undefined") return;
+    try {
+      const savedTrack = localStorage.getItem("vibespace_last_track");
+      if (savedTrack) {
+        const parsedTrack: Track = JSON.parse(savedTrack);
+        this.session.playbackState.currentTrack = parsedTrack;
+      }
+      const savedQueue = localStorage.getItem("vibespace_last_queue");
+      if (savedQueue) {
+        this.session.queue = JSON.parse(savedQueue);
+      }
+      const savedPos = localStorage.getItem("vibespace_last_position");
+      if (savedPos) {
+        this.session.playbackState.currentPosition = parseFloat(savedPos);
+      }
+      // On fresh page reload, keep player paused until user clicks Play
+      this.session.playbackState.isPlaying = false;
+    } catch (e) {}
+  }
+
+  private saveStateToStorage() {
+    if (typeof window === "undefined") return;
+    try {
+      if (this.session.playbackState.currentTrack) {
+        localStorage.setItem("vibespace_last_track", JSON.stringify(this.session.playbackState.currentTrack));
+      }
+      localStorage.setItem("vibespace_last_queue", JSON.stringify(this.session.queue));
+      localStorage.setItem("vibespace_last_position", String(this.session.playbackState.currentPosition || 0));
+    } catch (e) {}
   }
 
   private initAudioEngine() {
@@ -173,6 +206,7 @@ class RealtimeSessionStore {
     }
 
     this.addSystemChatMessage(`${CURRENT_USER.name} started playing "${track.title}" 🎵`);
+    this.saveStateToStorage();
     this.notify();
   }
 
@@ -196,6 +230,7 @@ class RealtimeSessionStore {
 
     const action = newIsPlaying ? "resumed playback" : "paused playback";
     this.addSystemChatMessage(`${CURRENT_USER.name} ${action} ⏯️`);
+    this.saveStateToStorage();
     this.notify();
   }
 
@@ -209,6 +244,7 @@ class RealtimeSessionStore {
     }
 
     this.addSystemChatMessage(`${CURRENT_USER.name} seeked to ${Math.floor(positionInSeconds)}s ⏩`);
+    this.saveStateToStorage();
     this.notify();
   }
 
@@ -245,6 +281,7 @@ class RealtimeSessionStore {
     this.session.queue.push(newItem);
     this.sortQueue();
     this.addSystemChatMessage(`${user.name} added "${track.title}" to the queue 🎶`);
+    this.saveStateToStorage();
     this.notify();
   }
 
@@ -273,6 +310,7 @@ class RealtimeSessionStore {
     if (itemToRemove) {
       this.addSystemChatMessage(`${CURRENT_USER.name} removed "${itemToRemove.track.title}" from queue 🗑️`);
     }
+    this.saveStateToStorage();
     this.notify();
   }
 

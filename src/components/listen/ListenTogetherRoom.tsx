@@ -63,7 +63,12 @@ export const ListenTogetherRoom: React.FC<ListenTogetherRoomProps> = ({ onClose 
   const [isSearching, setIsSearching] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [addedToast, setAddedToast] = useState<string | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
   const searchSectionRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   // Custom Playlists State & localStorage Persistence
   const [playlists, setPlaylists] = useState<CustomPlaylist[]>(DEFAULT_PLAYLISTS);
@@ -306,7 +311,7 @@ export const ListenTogetherRoom: React.FC<ListenTogetherRoomProps> = ({ onClose 
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6 pb-24 select-none animate-in fade-in duration-300">
+    <div className="max-w-6xl mx-auto space-y-6 pb-32 select-none">
       {/* MUSIC ROOM TOP HEADER (SHRUNK BY 30% - SLEEK & COMPACT) */}
       <div className="relative overflow-hidden p-2.5 sm:p-3 flex flex-col sm:flex-row items-center justify-between gap-2.5 rounded-2xl text-[#050505] shadow-md shadow-blue-500/5 bg-gradient-to-r from-white via-blue-50/70 to-indigo-50/50 border border-[#1877F2]/25 backdrop-blur-2xl">
         {/* Soft Ambient Mesh Glow Overlay */}
@@ -495,23 +500,46 @@ export const ListenTogetherRoom: React.FC<ListenTogetherRoomProps> = ({ onClose 
               ))}
             </div>
 
-            <form onSubmit={handleSendChat} className="flex gap-2 pt-2 border-t border-[#1877F2]/15 relative z-10">
+            {/* Desktop Only Chat Input Form */}
+            <form
+              onSubmit={handleSendChat}
+              className="hidden lg:flex gap-2.5 p-2.5 border-t border-[#1877F2]/20 bg-white/95 backdrop-blur-xl rounded-2xl shadow-sm shrink-0 mt-auto"
+            >
               <input
                 type="text"
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 placeholder="Chat with room..."
-                className="flex-1 bg-white/90 border border-[#1877F2]/20 rounded-xl px-4 py-2.5 text-xs text-[#050505] placeholder-[#65676B] focus:outline-none focus:border-[#1877F2] focus:bg-white transition-colors font-medium shadow-sm"
+                className="flex-1 bg-white border border-[#1877F2]/30 rounded-xl px-4 py-2.5 text-xs text-[#050505] placeholder-[#65676B] focus:outline-none focus:border-[#1877F2] focus:ring-2 focus:ring-[#1877F2]/20 transition-all font-medium shadow-sm"
               />
               <button
                 type="submit"
-                className="px-5 py-2.5 bg-[#1877F2] hover:bg-blue-600 rounded-xl text-xs font-bold text-white transition-all shadow-md shadow-blue-500/20 active:scale-95"
+                className="px-6 py-2.5 bg-[#1877F2] hover:bg-blue-600 rounded-xl text-xs font-extrabold text-white transition-all shadow-md shadow-blue-500/25 active:scale-95 shrink-0"
               >
                 Send
               </button>
             </form>
           </div>
         </div>
+      </div>
+
+      {/* Mobile/Tablet Fixed Chat Form (100% Fixed directly above Mobile Nav Bar h-16) */}
+      <div className="lg:hidden fixed bottom-16 left-0 right-0 z-50 p-2.5 px-3 bg-white/95 backdrop-blur-2xl border-t border-[#1877F2]/30 shadow-2xl">
+        <form onSubmit={handleSendChat} className="flex gap-2.5 max-w-xl mx-auto">
+          <input
+            type="text"
+            value={chatInput}
+            onChange={(e) => setChatInput(e.target.value)}
+            placeholder="Chat with room..."
+            className="flex-1 bg-white border border-[#1877F2]/30 rounded-xl px-4 py-2.5 text-xs text-[#050505] placeholder-[#65676B] focus:outline-none focus:border-[#1877F2] focus:ring-2 focus:ring-[#1877F2]/20 transition-all font-medium shadow-sm"
+          />
+          <button
+            type="submit"
+            className="px-6 py-2.5 bg-[#1877F2] hover:bg-blue-600 rounded-xl text-xs font-extrabold text-white transition-all shadow-md shadow-blue-500/25 active:scale-95 shrink-0"
+          >
+            Send
+          </button>
+        </form>
       </div>
 
       {/* POP-UP QUEUE MODAL WITH LIVE YOUTUBE MUSIC SEARCH (STUNNING LIGHT THEME AMBIENT CARD) */}

@@ -532,10 +532,10 @@ export const MOCK_SPACES: Space[] = [
 
 export const INITIAL_LISTENING_SESSION: ListeningSession = {
   id: "session-couple-1",
-  title: "Alex & Sam's Midnight Lounge 🌙",
+  title: "My Vibe Lounge 🌙",
   host: CURRENT_USER,
-  coHosts: [SAM_PROFILE],
-  participants: [CURRENT_USER, SAM_PROFILE, MOCK_USERS[2]],
+  coHosts: [],
+  participants: [CURRENT_USER],
   isPublic: false,
   roomCode: "VIBE-8842",
   playbackState: {
@@ -550,17 +550,11 @@ export const INITIAL_LISTENING_SESSION: ListeningSession = {
   queue: [],
   controlMode: "everyone",
   liveChat: [
-    { id: "lc-1", author: CURRENT_USER, text: "Welcome to our room! Synced listening activated 🟢", time: "8:45 PM", system: true },
-    { id: "lc-2", author: SAM_PROFILE, text: "The synth drop on this song is incredible! 🔥", time: "8:46 PM" },
-    { id: "lc-3", author: MOCK_USERS[2], text: "Priya joined the session 🎧", time: "8:47 PM", system: true },
-    { id: "lc-4", author: MOCK_USERS[2], text: "Upvoted 'Starlight Coffee' for next up!", time: "8:48 PM" },
+    { id: "lc-1", author: CURRENT_USER, text: "Welcome to your VibeSpace Room! Synced listening activated 🟢", time: "Just now", system: true },
   ],
-  currentReactions: [
-    { id: "r-1", emoji: "❤️", userId: SAM_PROFILE.id, userName: "Sam", timestamp: Date.now() - 2000 },
-    { id: "r-2", emoji: "🔥", userId: MOCK_USERS[2].id, userName: "Priya", timestamp: Date.now() - 1000 },
-  ],
+  currentReactions: [],
   syncStatus: "synced",
-  driftMs: 14,
+  driftMs: 0,
 };
 
 export const MOCK_COMMUNITIES: Community[] = [
