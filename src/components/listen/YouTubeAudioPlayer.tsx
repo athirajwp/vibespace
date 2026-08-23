@@ -98,14 +98,19 @@ export const YouTubeAudioPlayer: React.FC<YouTubeAudioPlayerProps> = ({
   }, [isPlaying, videoId]);
 
   // Synchronize Progress Scrubber Seeking with YouTube Engine
+  const prevPositionRef = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (!iframeRef.current || currentPosition === undefined) return;
-    try {
-      iframeRef.current.contentWindow?.postMessage(
-        JSON.stringify({ event: "command", func: "seekTo", args: [currentPosition, true] }),
-        "*"
-      );
-    } catch (e) {}
+    const delta = Math.abs(currentPosition - (prevPositionRef.current ?? currentPosition));
+    if (prevPositionRef.current === undefined || delta > 2.0) {
+      try {
+        iframeRef.current.contentWindow?.postMessage(
+          JSON.stringify({ event: "command", func: "seekTo", args: [currentPosition, true] }),
+          "*"
+        );
+      } catch (e) {}
+    }
+    prevPositionRef.current = currentPosition;
   }, [currentPosition]);
 
   const handleSelectTrack = (trackItem: any) => {

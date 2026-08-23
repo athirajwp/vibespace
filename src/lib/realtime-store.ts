@@ -54,7 +54,11 @@ class RealtimeSessionStore {
         if (this.session.playbackState.currentPosition >= maxDuration) {
           this.session.playbackState.currentPosition = 0;
         } else {
-          this.session.playbackState.currentPosition += 1;
+          if (this.audioEl && this.audioEl.src && !this.audioEl.paused && !this.audioEl.ended) {
+            this.session.playbackState.currentPosition = this.audioEl.currentTime;
+          } else {
+            this.session.playbackState.currentPosition += 1;
+          }
         }
         this.session.playbackState.updatedAt = Date.now();
       }
@@ -99,6 +103,16 @@ class RealtimeSessionStore {
       return;
     }
 
+    // Host audio element is authoritative source of truth for host
+    if (state.hostId === CURRENT_USER.id) {
+      if (this.audioEl && this.audioEl.playbackRate !== 1.0) {
+        this.audioEl.playbackRate = 1.0;
+      }
+      this.session.syncStatus = "synced";
+      this.session.driftMs = 0;
+      return;
+    }
+
     const now = Date.now();
     const elapsedTime = (now - state.updatedAt) / 1000;
     const expectedPosition = state.currentPosition + elapsedTime * state.playbackRate;
@@ -108,16 +122,15 @@ class RealtimeSessionStore {
       const driftSec = Math.abs(currentPos - expectedPosition);
       this.session.driftMs = Math.round(driftSec * 1000);
 
-      // Drift correction thresholding logic per section 8 requirement:
-      if (driftSec > 1.5) {
+      if (driftSec > 3.0) {
         // Large drift: Hard seek to corrected timestamp
         this.audioEl.currentTime = expectedPosition;
         this.session.syncStatus = "syncing";
         setTimeout(() => {
           this.session.syncStatus = "synced";
         }, 800);
-      } else if (driftSec > 0.3) {
-        // Minor drift: Temporary micro playback rate adjustment
+      } else if (driftSec > 1.0) {
+        // Minor drift: Micro playback rate adjustment for sync
         this.audioEl.playbackRate = currentPos < expectedPosition ? 1.05 : 0.95;
         this.session.syncStatus = "syncing";
       } else {
